@@ -68,7 +68,12 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
     const [isIdle, setIsIdle] = useState(false);
     const [isRecurring, setIsRecurring] = useState(false);
     const [showRecurring, setShowRecurring] = useState(false);
-    const [qTime, setQTime] = useState("16:00");
+    const [showArchived, setShowArchived] = useState(false);
+    const [qTime, setQTime] = useState(() => {
+        const d = new Date();
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        return d.toISOString().slice(0, 16);
+    });
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editTaskStr, setEditTaskStr] = useState("");
 
@@ -146,18 +151,23 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                     <button className="wb w-6 h-6 rounded hover:bg-black/10" onClick={onToggle}>▶</button>
                     <h2 className="label !m-0" style={{ opacity: 0.9 }}>Up Next</h2>
                 </div>
-                <span className="text-[10px] font-bold opacity-50 uppercase tracking-wider">{queue.length} items</span>
+                <span className="text-[10px] font-bold opacity-50 uppercase tracking-wider">{queue.filter(q => !q.archived).length} items</span>
             </div>
 
             <div className="flex flex-col gap-3 overflow-y-auto flex-1" style={{ padding: '1.25rem' }}>
                 {(() => {
-                    const hasNonRecurring = queue.some(q => !q.recurring);
-                    const hasRecurring = queue.some(q => q.recurring);
+                    const hasNonRecurring = queue.some(q => !q.recurring && !q.archived);
+                    const hasRecurring = queue.some(q => q.recurring && !q.archived);
                     const canHide = hasNonRecurring && hasRecurring;
 
-                    const visibleQueue = queue.filter(q => (hasNonRecurring && !showRecurring) ? !q.recurring : true);
+                    const visibleQueue = queue.filter(q => {
+                        if (showArchived) return q.archived;
+                        if (q.archived) return false;
+                        if (hasNonRecurring && !showRecurring && q.recurring) return false;
+                        return true;
+                    });
 
-                    if (visibleQueue.length === 0) {
+                    if (visibleQueue.length === 0 && !showArchived) {
                         return <p className="text-[13px] opacity-50 text-center py-6">Your queue is empty.</p>;
                     }
 
@@ -179,25 +189,38 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                     currentTime = new Date(realNow);
                                 }
 
-                                const startInfo = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                let startInfoStr = "";
+                                let endInfoStr = "";
 
                                 if (q.idleTime) {
-                                    const [h, m] = q.idleTime.split(":").map(Number);
-                                    let target = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate(), h, m);
-                                    if (target.getTime() <= currentTime.getTime()) {
-                                        target.setTime(target.getTime() + 86400000);
+                                    let target: Date;
+                                    if (q.idleTime.includes("T")) {
+                                        target = new Date(q.idleTime);
+                                    } else {
+                                        target = new Date(realNow);
+                                        const [h, m] = q.idleTime.split(":").map(Number);
+                                        target.setHours(h, m, 0, 0);
+                                        if (target.getTime() <= realNow.getTime()) {
+                                            target.setTime(target.getTime() + 86400000);
+                                        }
                                     }
-                                    currentTime = target;
+
+                                    startInfoStr = target.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + " " + target.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                                    const end = new Date(target.getTime());
+                                    end.setMinutes(end.getMinutes() + (durations[q.type as keyof typeof durations] || [25, 5])[0]);
+                                    endInfoStr = end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + " " + end.toLocaleDateString([], { month: 'short', day: 'numeric' });
                                 } else {
+                                    startInfoStr = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                                     const bcfg = durations[q.type] || [25, 5];
+
+                                    const endInfo = new Date(currentTime.getTime());
+                                    endInfo.setMinutes(endInfo.getMinutes() + bcfg[0]);
+                                    endInfoStr = endInfo.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
                                     currentTime.setMinutes(currentTime.getMinutes() + bcfg[0] + bcfg[1]);
                                 }
 
                                 const trueIndex = queue.findIndex(x => x.id === q.id);
-
-                                const endInfo = new Date(currentTime.getTime());
-                                endInfo.setMinutes(endInfo.getMinutes() + (durations[q.type as keyof typeof durations] || [25, 5])[0]);
-                                const endInfoStr = endInfo.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
                                 return (
                                     <div key={q.id} className="hist-item relative group text-left flex flex-col justify-between gap-3 p-4 rounded transition-colors hover:bg-black/5 shrink-0" style={{ border: '1px solid var(--border-ring)' }}>
@@ -205,6 +228,7 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                             <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={trueIndex <= 0} onClick={() => moveUp(q.id)}>↑</button>
                                             <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={trueIndex >= queue.length - 1} onClick={() => moveDown(q.id)}>↓</button>
                                             {editingId !== q.id && <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title="Edit" onClick={() => startEditing(q)}>✎</button>}
+                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title={q.archived ? "Unarchive" : "Archive"} onClick={() => setQueue(queue.map(x => x.id === q.id ? { ...x, archived: !x.archived } : x))}>{q.archived ? "⇧" : "⇩"}</button>
                                             <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-red-500 hover:text-white" onClick={() => setQueue(queue.filter(x => x.id !== q.id))}>✕</button>
                                         </div>
 
@@ -223,7 +247,7 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                                     <span onClick={() => startEditing(q)}>{q.task}</span>
                                                 )}
                                                 {q.recurring && <span className="ml-2 text-[9px] font-black uppercase text-[#ffffff] bg-[var(--accent)] px-1.5 py-0.5 rounded-full inline-block align-middle mb-0.5 opacity-80" style={{ color: '#ffffff', backgroundColor: 'var(--accent)' }}>Recurring</span>}
-                                                {q.idleTime && <span className="ml-2 text-[9px] font-black uppercase text-[var(--text)] bg-[var(--text)]/10 px-1.5 py-0.5 rounded-full inline-block align-middle mb-0.5 opacity-80 border border-[var(--text)]/20" style={{ color: 'var(--text)', borderColor: 'var(--text)' }}>Sched @ {q.idleTime}</span>}
+                                                {q.idleTime && <span className="ml-2 text-[9px] font-black uppercase text-[var(--text)] bg-[var(--text)]/10 px-1.5 py-0.5 rounded-full inline-block align-middle mb-0.5 opacity-80 border border-[var(--text)]/20" style={{ color: 'var(--text)', borderColor: 'var(--text)' }}>Sched @ {q.idleTime.includes("T") ? new Date(q.idleTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : q.idleTime}</span>}
                                             </div>
 
                                             <div className="shrink-0 text-right mt-0.5" style={{ color: 'var(--text)' }}>
@@ -235,7 +259,7 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
 
                                         <div className="flex justify-between w-full items-end mt-1" style={{ color: 'var(--text)' }}>
                                             <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">
-                                                ~{startInfo}
+                                                ~{startInfoStr}
                                             </span>
                                             <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">
                                                 ~{endInfoStr}
@@ -244,6 +268,15 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                     </div>
                                 );
                             })}
+
+                            <div className="pt-2 border-t border-[var(--border-ring)] flex justify-center w-full mt-2">
+                                <button
+                                    className="text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity flex items-center gap-1"
+                                    onClick={() => setShowArchived(!showArchived)}
+                                >
+                                    {showArchived ? "Back to Queue" : `View Archive (${queue.filter(q => q.archived).length})`}
+                                </button>
+                            </div>
                         </>
                     );
                 })()}
@@ -305,7 +338,7 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                 </div>
 
                 {isIdle && (
-                    <input type="time" className="task-input flex-1 px-4 py-2 h-10 text-sm max-w-none shadow-sm border-none bg-white rounded-lg" value={qTime} onChange={e => setQTime(e.target.value)} />
+                    <input type="datetime-local" className="task-input flex-1 px-4 py-2 h-10 text-sm max-w-none shadow-sm border-none bg-white rounded-lg" value={qTime} onChange={e => setQTime(e.target.value)} />
                 )}
 
                 <button className="btn w-full py-3 mt-1 font-semibold tracking-wide rounded-lg bg-black text-white shadow-md hover:opacity-90 transition-all border-none" onClick={addQueue}>+ Add to Queue</button>

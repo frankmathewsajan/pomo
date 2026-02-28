@@ -117,22 +117,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return { ...p, mode: "w", running: true, targetMs: Date.now() + dur, pausedLeftMs: null };
         }),
         nextInQueue: () => set(p => {
-            const hasNormal = p.queue.some(q => !q.recurring);
-            const qIndex = p.queue.findIndex(q => hasNormal ? !q.recurring : true);
+            const activeQueue = p.queue.filter(q => !q.archived);
+            const hasNormal = activeQueue.some(q => !q.recurring);
+            const qIndex = p.queue.findIndex(q => !q.archived && (hasNormal ? !q.recurring : true));
             const qItem = p.queue[qIndex];
 
             if (qItem) {
-                const nextQ = [...p.queue];
+                let nextQ = [...p.queue];
                 nextQ.splice(qIndex, 1);
                 if (qItem.recurring) {
-                    nextQ.push({ ...qItem, id: Math.random().toString(36).substring(7) }); // update id slightly so key changes if needed, actually keeping same ID is fine if we want, but generating new is safer for react keys
+                    nextQ.push({ ...qItem, id: Math.random().toString(36).substring(7), archived: false });
+                    nextQ = nextQ.map(q => ({ ...q, archived: false }));
                 }
 
                 if (qItem.idleTime) {
-                    const ct = new Date();
-                    const [h, m] = qItem.idleTime.split(":").map(Number);
-                    let target = new Date(ct.getFullYear(), ct.getMonth(), ct.getDate(), h, m).getTime();
-                    if (target <= ct.getTime()) target += 86400000;
+                    let target: number;
+                    if (qItem.idleTime.includes("T")) {
+                        target = new Date(qItem.idleTime).getTime();
+                    } else {
+                        const ct = new Date();
+                        const [h, m] = qItem.idleTime.split(":").map(Number);
+                        target = new Date(ct.getFullYear(), ct.getMonth(), ct.getDate(), h, m).getTime();
+                        if (target <= ct.getTime()) target += 86400000;
+                    }
                     return { ...p, mode: "idle", block: qItem.type as Block, task: qItem.task, queue: nextQ, running: true, targetMs: target, pausedLeftMs: null };
                 } else {
                     const dur = (p.durations[qItem.type as Block] || [25, 5])[0] * 60000;
