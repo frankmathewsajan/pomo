@@ -5,17 +5,28 @@ import { T } from './themes';
 import App from './App';
 
 // Mock Tauri window APIs
-vi.stubGlobal('window', {
-    __TAURI__: {
-        window: {
-            getCurrentWindow: () => ({
-                minimize: vi.fn(),
-                toggleMaximize: vi.fn(),
-                close: vi.fn()
-            })
+vi.mock('@tauri-apps/api/window', () => ({
+    getCurrentWindow: () => ({
+        minimize: vi.fn(),
+        toggleMaximize: vi.fn(),
+        close: vi.fn(),
+        scaleFactor: vi.fn().mockResolvedValue(1),
+        innerSize: vi.fn().mockResolvedValue({
+            toLogical: vi.fn().mockReturnValue({ width: 800, height: 600 })
+        }),
+        setSize: vi.fn().mockResolvedValue(undefined)
+    }),
+    LogicalSize: class LogicalSize {
+        width: number;
+        height: number;
+        constructor(width: number, height: number) {
+            this.width = width;
+            this.height = height;
         }
     }
-});
+}));
+
+Object.defineProperty(window, '__TAURI__', { value: {} });
 
 describe('App Utilities & Components', () => {
     it('defines the correct block names', () => {

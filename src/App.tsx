@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 import { AppProvider, useApp } from "./ctx";
 import Timer from "./Timer";
 import { T } from "./themes";
@@ -318,6 +319,66 @@ function Chrome() {
     const [leftOpen, setLeftOpen] = useState(false);
     const [rightOpen, setRightOpen] = useState(false);
 
+    const toggleLeft = () => {
+        if (!leftOpen && rightOpen && window.innerWidth < 1100) {
+            setRightOpen(false);
+        }
+        setLeftOpen(!leftOpen);
+    };
+
+    const toggleRight = () => {
+        if (!rightOpen && leftOpen && window.innerWidth < 1100) {
+            setLeftOpen(false);
+        }
+        setRightOpen(!rightOpen);
+    };
+
+    // Auto-collapse if the window size gets too small natively
+    useEffect(() => {
+        const handleResize = () => {
+            if (window.innerWidth < 950 && leftOpen && rightOpen) {
+                // If window width is too small to hold both sidebars gracefully, collapse one
+                setRightOpen(false);
+            }
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, [leftOpen, rightOpen]);
+
+    useEffect(() => {
+        const calculateAndSetWidth = async () => {
+            try {
+                const appWindow = getCurrentWindow();
+                // We know min-height is 500 from tauri.conf.json.
+                // Keep the current logical height, just adjust width.
+                const factor = await appWindow.scaleFactor();
+                const currentPhysical = await appWindow.innerSize();
+                const currentLogical = currentPhysical.toLogical(factor);
+
+                // Base app width is 460 to ensure no overlap for Timer controls
+                const leftWidth = leftOpen ? 320 : 56;
+                const rightWidth = rightOpen ? 320 : 56;
+
+                // Allow dynamic expansion and shrinking
+                // Base 500 prevents Timer from crushing absolute buttons
+                const targetWidth = 500 + leftWidth + rightWidth;
+
+                // Explicitly set the width so closing a sidebar visually snaps it shut
+                await appWindow.setSize(new LogicalSize(targetWidth, currentLogical.height));
+            } catch (err) {
+                console.error("Failed to resize window:", err);
+            }
+        };
+
+        // Let's only run in Tauri (where __TAURI__ is defined)
+        if ((window as any).__TAURI__) {
+            calculateAndSetWidth();
+        }
+    }, [leftOpen, rightOpen]);
+
+    const nextThemeIndex = (theme + 1) % T.length;
+    const nextThemeAccent = T[nextThemeIndex].v["--accent"];
+
     return (
         <div className="h-screen flex flex-col overflow-hidden" style={{ background: "var(--bg)", color: "var(--text)", fontFamily: "var(--font)" }}>
             <div data-tauri-drag-region className="titlebar flex items-center justify-between px-8 py-5 select-none border-b transition-colors" style={{ borderColor: 'var(--border-ring)' }}>
@@ -326,35 +387,33 @@ function Chrome() {
                 </div>
 
                 <div className="flex gap-2 z-50">
-                    <button className="wb w-7 h-7 flex items-center justify-center hover:bg-black/10 transition-colors rounded" onClick={() => (window as any).__TAURI__?.window?.getCurrentWindow().minimize()}>─</button>
-                    <button className="wb w-7 h-7 flex items-center justify-center hover:bg-black/10 transition-colors rounded" onClick={() => (window as any).__TAURI__?.window?.getCurrentWindow().toggleMaximize()}>□</button>
-                    <button className="wb close w-7 h-7 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors rounded" onClick={() => (window as any).__TAURI__?.window?.getCurrentWindow().close()}>✕</button>
+                    <button className="wb w-7 h-7 flex items-center justify-center hover:bg-black/10 transition-colors rounded" onClick={() => getCurrentWindow().minimize()}>─</button>
+                    <button className="wb w-7 h-7 flex items-center justify-center hover:bg-black/10 transition-colors rounded" onClick={() => getCurrentWindow().toggleMaximize()}>□</button>
+                    <button className="wb close w-7 h-7 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors rounded" onClick={() => getCurrentWindow().close()}>✕</button>
                 </div>
             </div>
             <div className="flex flex-1 overflow-hidden backdrop-blur-3xl" style={{ backdropFilter: 'var(--backdrop)', WebkitBackdropFilter: 'var(--backdrop)' }}>
-                <ActivitySidebar isOpen={leftOpen} onToggle={() => setLeftOpen(!leftOpen)} />
-                <main className="flex-1 min-w-[320px] sm:min-w-[420px] flex flex-col items-center justify-center p-6 sm:p-12 overflow-y-auto relative">
-                    <div className="absolute top-8 right-8 z-50">
-                        <div
-                            className="relative flex items-center justify-center bg-black/10 rounded-full cursor-pointer transition-colors hover:bg-black/20 shadow-inner"
-                            onClick={next}
-                            style={{ width: '130px', height: '32px' }}
-                            title="Switch Theme"
-                        >
-                            <div className="absolute inset-y-1 bg-white rounded-full shadow-sm transition-all duration-300" style={{ left: '4px', right: '4px', zIndex: 0 }} />
-                            <div className="relative z-10 w-full text-center text-[10px] font-bold uppercase tracking-wider text-black/80 pointer-events-none">
-                                {T[theme].name}
-                            </div>
-                        </div>
-                    </div>
+                <ActivitySidebar isOpen={leftOpen} onToggle={toggleLeft} />
+                <main className="flex-1 min-w-[500px] flex flex-col items-center justify-center p-6 sm:p-12 overflow-y-auto relative">
+
                     <Timer />
 
-                    {/* Sync / Settings Menu */}
-                    <div className="absolute bottom-8 left-8 z-50">
+                    {/* Bottom Left Controls */}
+                    <div className="absolute bottom-6 left-6 sm:bottom-8 sm:left-8 z-50 flex flex-col items-center gap-4">
+                        <button
+                            className="w-10 h-10 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-all shadow-sm cursor-pointer hover:scale-105"
+                            onClick={next}
+                            title={`Next Theme: ${T[nextThemeIndex].name}`}
+                        >
+                            <svg className="w-5 h-5 transition-colors" style={{ color: nextThemeAccent, opacity: 0.85 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                            </svg>
+                        </button>
+
                         <SyncMenu />
                     </div>
                 </main>
-                <QueueSidebar isOpen={rightOpen} onToggle={() => setRightOpen(!rightOpen)} />
+                <QueueSidebar isOpen={rightOpen} onToggle={toggleRight} />
             </div>
         </div>
     );
