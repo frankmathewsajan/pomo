@@ -3,9 +3,9 @@ export const T = [
         name: "Brutalist", cls: "t-brut",
         v: {
             "--bg": "#f5f0e6", "--card": "#fff", "--text": "#000", "--accent": "#ff5722",
-            "--border": "2px solid #000", "--border-ring": "#000", "--shadow": "4px 4px 0px 0px rgba(0,0,0,1)",
-            "--shadow-hover": "8px 8px 0px 0px rgba(0,0,0,1)", "--shadow-active": "2px 2px 0px 0px rgba(0,0,0,1)",
-            "--radius": "0px", "--font": "'Space Mono', monospace", "--weight": "800", "--btn-transform": "translate(-4px, -4px)", "--btn-transform-active": "translate(0)"
+            "--shadow": "2px 2px 0px 0px rgba(0,0,0,1)",
+            "--shadow-hover": "4px 4px 0px 0px rgba(0,0,0,1)", "--shadow-active": "1px 1px 0px 0px rgba(0,0,0,1)",
+            "--radius": "0px", "--font": "'Space Mono', monospace", "--weight": "800", "--btn-transform": "translate(-2px, -2px)", "--btn-transform-active": "translate(0)"
         }
     },
     {

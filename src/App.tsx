@@ -194,35 +194,52 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
 
                                 const trueIndex = queue.findIndex(x => x.id === q.id);
 
+                                const endInfo = new Date(currentTime.getTime());
+                                endInfo.setMinutes(endInfo.getMinutes() + (durations[q.type as keyof typeof durations] || [25, 5])[0]);
+                                const endInfoStr = endInfo.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
                                 return (
-                                    <div key={q.id} className="hist-item relative group text-left flex flex-col items-start gap-2 p-4 rounded transition-colors hover:bg-black/5 shrink-0" style={{ border: '1px solid var(--border-ring)' }}>
-                                        <div className="flex justify-between w-full items-start gap-2">
-                                            {editingId === q.id ? (
-                                                <input
-                                                    className="task-input w-full text-sm font-semibold !p-1 -ml-1 h-auto"
-                                                    value={editTaskStr}
-                                                    onChange={e => setEditTaskStr(e.target.value)}
-                                                    onKeyDown={e => handleEditKeyDown(e, q.id)}
-                                                    onBlur={() => saveEdit(q.id)}
-                                                    autoFocus
-                                                />
-                                            ) : (
-                                                <span
-                                                    className="font-semibold text-sm leading-tight flex-1 cursor-text select-none"
-                                                    style={{ wordBreak: 'break-word' }}
-                                                    onClick={() => startEditing(q)}
-                                                >
-                                                    {q.task}
+                                    <div key={q.id} className="hist-item relative group text-left flex flex-col justify-between gap-3 p-4 rounded transition-colors hover:bg-black/5 shrink-0" style={{ border: '1px solid var(--border-ring)' }}>
+                                        <div className="absolute top-2 right-2 flex items-center bg-[var(--card)]/90 backdrop-blur-md rounded-md shadow-sm border border-[var(--border-ring)] opacity-0 group-hover:opacity-100 transition-opacity z-10 px-1 py-1">
+                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={trueIndex <= 0} onClick={() => moveUp(q.id)}>↑</button>
+                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={trueIndex >= queue.length - 1} onClick={() => moveDown(q.id)}>↓</button>
+                                            {editingId !== q.id && <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title="Edit" onClick={() => startEditing(q)}>✎</button>}
+                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-red-500 hover:text-white" onClick={() => setQueue(queue.filter(x => x.id !== q.id))}>✕</button>
+                                        </div>
+
+                                        <div className="flex justify-between w-full items-start gap-4 pr-1">
+                                            <div className="flex-1 font-bold text-[14px] sm:text-[15px] leading-tight text-left cursor-text select-none text-[var(--text)]" style={{ wordBreak: 'break-word', minHeight: '1.5rem' }}>
+                                                {editingId === q.id ? (
+                                                    <input
+                                                        className="task-input w-full text-sm font-semibold !p-1 -ml-1 h-auto"
+                                                        value={editTaskStr}
+                                                        onChange={e => setEditTaskStr(e.target.value)}
+                                                        onKeyDown={e => handleEditKeyDown(e, q.id)}
+                                                        onBlur={() => saveEdit(q.id)}
+                                                        autoFocus
+                                                    />
+                                                ) : (
+                                                    <span onClick={() => startEditing(q)}>{q.task}</span>
+                                                )}
+                                                {q.recurring && <span className="ml-2 text-[9px] font-black uppercase text-[#ffffff] bg-[var(--accent)] px-1.5 py-0.5 rounded-full inline-block align-middle mb-0.5 opacity-80" style={{ color: '#ffffff', backgroundColor: 'var(--accent)' }}>Recurring</span>}
+                                                {q.idleTime && <span className="ml-2 text-[9px] font-black uppercase text-[var(--text)] bg-[var(--text)]/10 px-1.5 py-0.5 rounded-full inline-block align-middle mb-0.5 opacity-80 border border-[var(--text)]/20" style={{ color: 'var(--text)', borderColor: 'var(--text)' }}>Sched @ {q.idleTime}</span>}
+                                            </div>
+
+                                            <div className="shrink-0 text-right mt-0.5" style={{ color: 'var(--text)' }}>
+                                                <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-widest opacity-60">
+                                                    {q.type} ({(durations[q.type as keyof typeof durations] || [25, 5])[0]}m)
                                                 </span>
-                                            )}
-                                            <div className="flex opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                                <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={trueIndex <= 0} onClick={() => moveUp(q.id)}>↑</button>
-                                                <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={trueIndex >= queue.length - 1} onClick={() => moveDown(q.id)}>↓</button>
-                                                {editingId !== q.id && <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title="Edit" onClick={() => startEditing(q)}>✎</button>}
-                                                <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-red-500 hover:text-white" onClick={() => setQueue(queue.filter(x => x.id !== q.id))}>✕</button>
                                             </div>
                                         </div>
-                                        <span className="opacity-60 text-[10px] font-bold uppercase tracking-wider">{q.type} {q.recurring ? "(Recurring)" : ""} {q.idleTime ? `(scheduled ~ ${q.idleTime})` : ''} • ~{startInfo}</span>
+
+                                        <div className="flex justify-between w-full items-end mt-1" style={{ color: 'var(--text)' }}>
+                                            <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">
+                                                ~{startInfo}
+                                            </span>
+                                            <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">
+                                                ~{endInfoStr}
+                                            </span>
+                                        </div>
                                     </div>
                                 );
                             })}
@@ -234,23 +251,55 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
             <div className="border-t flex flex-col gap-3 shrink-0 bg-black/5" style={{ padding: '1.25rem', borderColor: 'var(--border-ring)' }}>
                 <p className="text-xs font-bold uppercase tracking-wider opacity-60 m-0">Add block</p>
 
-                <input className="task-input w-full !text-left px-4 py-2 text-sm max-w-none border-none bg-white rounded-lg shadow-sm" placeholder="Task name..." value={qTask} onChange={e => setQTask(e.target.value)} />
+                <input className="task-input w-full !text-left px-4 py-2 text-sm max-w-none border-none bg-white rounded-lg shadow-sm mb-3" placeholder="Task name..." value={qTask} onChange={e => setQTask(e.target.value)} />
 
                 <div className="flex gap-2 w-full">
                     {BLOCK_NAMES.map(b => (
-                        <button key={b} className={`pill flex-1 !px-2 !py-2 !text-xs capitalize transition-all duration-200 ${qType === b ? "bg-black text-white shadow-md scale-105" : "bg-black/5 opacity-70 hover:opacity-100"}`} onClick={() => setQType(b)}>{b}</button>
+                        <button
+                            key={b}
+                            className="pill flex-1 !px-2 !py-2 transition-all duration-200"
+                            style={{
+                                backgroundColor: qType === b ? 'var(--accent)' : 'transparent',
+                                color: qType === b ? '#ffffff' : 'var(--text)',
+                                border: '1px solid var(--border-ring)',
+                                opacity: qType === b ? 1 : 0.6,
+                                transform: qType === b ? 'scale(1.05)' : 'none',
+                                fontWeight: 'bold',
+                                textTransform: 'capitalize',
+                                fontSize: '0.75rem'
+                            }}
+                            onClick={() => setQType(b)}
+                        >
+                            {b}
+                        </button>
                     ))}
                 </div>
 
                 <div className="flex items-center gap-4 mt-1">
-                    <label className="flex items-center gap-2 cursor-pointer w-fit select-none shrink-0 group">
-                        <input type="checkbox" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)} className="cursor-pointer w-4 h-4 rounded text-black ring-0 border border-black/20" />
-                        <span className="text-[13px] font-medium opacity-80 group-hover:opacity-100 transition-opacity">Recurring</span>
+                    <label className="flex items-center gap-3 cursor-pointer w-fit select-none shrink-0 group" onClick={() => setIsRecurring(!isRecurring)}>
+                        <div
+                            className="relative w-8 h-4 rounded-full transition-colors duration-300"
+                            style={{ backgroundColor: isRecurring ? 'var(--accent)' : 'transparent', border: '1px solid var(--border-ring)' }}
+                        >
+                            <div
+                                className={`absolute top-0.5 rounded-full shadow-sm transform transition-transform duration-300 ${isRecurring ? 'translate-x-4' : 'translate-x-0'}`}
+                                style={{ width: '10px', height: '10px', left: '2px', backgroundColor: isRecurring ? '#ffffff' : 'var(--text)', opacity: isRecurring ? 1 : 0.7 }}
+                            />
+                        </div>
+                        <span className="text-[12px] font-bold tracking-wide uppercase opacity-70 group-hover:opacity-100 transition-opacity">Recurring</span>
                     </label>
 
-                    <label className="flex items-center gap-2 cursor-pointer w-fit select-none shrink-0 group">
-                        <input type="checkbox" checked={isIdle} onChange={e => setIsIdle(e.target.checked)} className="cursor-pointer w-4 h-4 rounded text-black ring-0 border border-black/20" />
-                        <span className="text-[13px] font-medium opacity-80 group-hover:opacity-100 transition-opacity">Schedule</span>
+                    <label className="flex items-center gap-3 cursor-pointer w-fit select-none shrink-0 group" onClick={() => setIsIdle(!isIdle)}>
+                        <div
+                            className="relative w-8 h-4 rounded-full transition-colors duration-300"
+                            style={{ backgroundColor: isIdle ? 'var(--accent)' : 'transparent', border: '1px solid var(--border-ring)' }}
+                        >
+                            <div
+                                className={`absolute top-0.5 rounded-full shadow-sm transform transition-transform duration-300 ${isIdle ? 'translate-x-4' : 'translate-x-0'}`}
+                                style={{ width: '10px', height: '10px', left: '2px', backgroundColor: isIdle ? '#ffffff' : 'var(--text)', opacity: isIdle ? 1 : 0.7 }}
+                            />
+                        </div>
+                        <span className="text-[12px] font-bold tracking-wide uppercase opacity-70 group-hover:opacity-100 transition-opacity">Schedule</span>
                     </label>
                 </div>
 
