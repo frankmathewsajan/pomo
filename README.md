@@ -43,9 +43,10 @@ Timer progress, active theme, block type, queued tasks, and history survive app 
 ## 📥 Download & Installation
 
 ### Option 1: Download from Releases (Ready-to-use)
-1. Go to the **Releases** section of this repository.
-2. Download the latest Windows installer (`.msi` or `.exe`).
-3. Run the installer to install POMO on your Windows machine.
+Get the prebuilt installer instantly:
+1. Go to the [POMO Releases Page](https://github.com/frankmathewsajan/pomo/releases/latest).
+2. Download the `pomo_X.X.X_x64-setup.exe` or `.msi` application installer.
+3. Run the installer to enjoy POMO on your Windows machine!
 
 ### Option 2: Build from Source (For Developers)
 If you prefer to build the App yourself or run it in development mode:
