@@ -8,6 +8,7 @@ export type QueuedBlock = {
     task: string;
     isIdle?: boolean;
     idleTime?: string; // e.g. "16:00"
+    recurring?: boolean;
 };
 
 export type HistoryStatus = "completed" | "early" | "aborted" | "scheduled";

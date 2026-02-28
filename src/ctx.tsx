@@ -117,9 +117,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return { ...p, mode: "w", running: true, targetMs: Date.now() + dur, pausedLeftMs: null };
         }),
         nextInQueue: () => set(p => {
-            const qItem = p.queue[0];
+            const hasNormal = p.queue.some(q => !q.recurring);
+            const qIndex = p.queue.findIndex(q => hasNormal ? !q.recurring : true);
+            const qItem = p.queue[qIndex];
+
             if (qItem) {
-                const nextQ = p.queue.slice(1);
+                const nextQ = [...p.queue];
+                nextQ.splice(qIndex, 1);
+                if (qItem.recurring) {
+                    nextQ.push({ ...qItem, id: Math.random().toString(36).substring(7) }); // update id slightly so key changes if needed, actually keeping same ID is fine if we want, but generating new is safer for react keys
+                }
+
                 if (qItem.idleTime) {
                     const ct = new Date();
                     const [h, m] = qItem.idleTime.split(":").map(Number);

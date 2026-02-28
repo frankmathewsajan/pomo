@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { AppProvider, useApp } from "./ctx";
 import Timer from "./Timer";
 import { T } from "./themes";
@@ -65,7 +65,11 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
     const [qType, setQType] = useState<Block>("normal");
     const [qTask, setQTask] = useState("");
     const [isIdle, setIsIdle] = useState(false);
+    const [isRecurring, setIsRecurring] = useState(false);
+    const [showRecurring, setShowRecurring] = useState(false);
     const [qTime, setQTime] = useState("16:00");
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editTaskStr, setEditTaskStr] = useState("");
 
     const addQueue = () => {
         if (!qTask.trim()) return;
@@ -74,26 +78,50 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
             type: qType,
             task: qTask,
             idleTime: isIdle ? qTime : undefined,
-            isIdle
+            isIdle,
+            recurring: isRecurring
         }]);
         setQTask("");
         setIsIdle(false);
+        setIsRecurring(false);
     };
 
-    const moveUp = (index: number) => {
-        if (index === 0) return;
+    const moveUp = (id: string) => {
+        const index = queue.findIndex(q => q.id === id);
+        if (index <= 0) return;
         const newQ = [...queue];
         [newQ[index - 1], newQ[index]] = [newQ[index], newQ[index - 1]];
         setQueue(newQ);
     };
 
-    const moveDown = (index: number) => {
-        if (index === queue.length - 1) return;
+    const moveDown = (id: string) => {
+        const index = queue.findIndex(q => q.id === id);
+        if (index === -1 || index === queue.length - 1) return;
         const newQ = [...queue];
         [newQ[index + 1], newQ[index]] = [newQ[index], newQ[index + 1]];
         setQueue(newQ);
     };
 
+    const startEditing = (q: typeof queue[0]) => {
+        setEditingId(q.id);
+        setEditTaskStr(q.task);
+    };
+
+    const saveEdit = (id: string) => {
+        if (!editTaskStr.trim()) {
+            setEditingId(null);
+            return;
+        }
+        setQueue(queue.map(q => q.id === id ? { ...q, task: editTaskStr } : q));
+        setEditingId(null);
+    };
+
+    const handleEditKeyDown = (e: React.KeyboardEvent, id: string) => {
+        if (e.key === "Enter") saveEdit(id);
+        if (e.key === "Escape") setEditingId(null);
+    };
+
+    // Calculate base future time for queue relative to right now
     let currentTime = new Date();
     currentTime.setSeconds(currentTime.getSeconds() + Math.ceil(timeLeftMs / 1000));
 
@@ -121,34 +149,86 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
             </div>
 
             <div className="flex flex-col gap-3 overflow-y-auto flex-1" style={{ padding: '1.25rem' }}>
-                {queue.map((q, i) => {
-                    const startInfo = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                {(() => {
+                    const hasNonRecurring = queue.some(q => !q.recurring);
+                    const hasRecurring = queue.some(q => q.recurring);
+                    const canHide = hasNonRecurring && hasRecurring;
 
-                    if (q.idleTime) {
-                        const [h, m] = q.idleTime.split(":").map(Number);
-                        let target = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate(), h, m);
-                        if (target.getTime() <= currentTime.getTime()) target.setTime(target.getTime() + 86400000);
-                        currentTime = target;
-                    } else {
-                        const bcfg = durations[q.type] || [25, 5];
-                        currentTime.setMinutes(currentTime.getMinutes() + bcfg[0] + bcfg[1]);
+                    const visibleQueue = queue.filter(q => (hasNonRecurring && !showRecurring) ? !q.recurring : true);
+
+                    if (visibleQueue.length === 0) {
+                        return <p className="text-[13px] opacity-50 text-center py-6">Your queue is empty.</p>;
                     }
 
                     return (
-                        <div key={q.id} className="hist-item relative group text-left flex flex-col items-start gap-2 p-4 rounded transition-colors hover:bg-black/5 shrink-0" style={{ border: '1px solid var(--border-ring)' }}>
-                            <div className="flex justify-between w-full items-start gap-2">
-                                <span className="font-semibold text-sm leading-tight flex-1" style={{ wordBreak: 'break-word' }}>{q.task}</span>
-                                <div className="flex opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                    <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={i === 0} onClick={() => moveUp(i)}>↑</button>
-                                    <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={i === queue.length - 1} onClick={() => moveDown(i)}>↓</button>
-                                    <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-red-500 hover:text-white" onClick={() => setQueue(queue.filter(x => x.id !== q.id))}>✕</button>
-                                </div>
-                            </div>
-                            <span className="opacity-60 text-[10px] font-bold uppercase tracking-wider">{q.type} {q.idleTime ? `(scheduled ~ ${q.idleTime})` : ''} • ~{startInfo}</span>
-                        </div>
+                        <>
+                            {canHide && (
+                                <button
+                                    className="text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity flex items-center justify-center gap-2 mb-1 w-full"
+                                    onClick={() => setShowRecurring(!showRecurring)}
+                                >
+                                    {showRecurring ? "Hide Recurring" : "Show Recurring"}
+                                    <span className="text-[8px]">{showRecurring ? "▲" : "▼"}</span>
+                                </button>
+                            )}
+                            {visibleQueue.map((q, i) => {
+                                // Real-time fix: Ensure future time calculation never drifts into the past
+                                const realNow = new Date();
+                                if (currentTime.getTime() < realNow.getTime()) {
+                                    currentTime = new Date(realNow);
+                                }
+
+                                const startInfo = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                                if (q.idleTime) {
+                                    const [h, m] = q.idleTime.split(":").map(Number);
+                                    let target = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate(), h, m);
+                                    if (target.getTime() <= currentTime.getTime()) {
+                                        target.setTime(target.getTime() + 86400000);
+                                    }
+                                    currentTime = target;
+                                } else {
+                                    const bcfg = durations[q.type] || [25, 5];
+                                    currentTime.setMinutes(currentTime.getMinutes() + bcfg[0] + bcfg[1]);
+                                }
+
+                                const trueIndex = queue.findIndex(x => x.id === q.id);
+
+                                return (
+                                    <div key={q.id} className="hist-item relative group text-left flex flex-col items-start gap-2 p-4 rounded transition-colors hover:bg-black/5 shrink-0" style={{ border: '1px solid var(--border-ring)' }}>
+                                        <div className="flex justify-between w-full items-start gap-2">
+                                            {editingId === q.id ? (
+                                                <input
+                                                    className="task-input w-full text-sm font-semibold !p-1 -ml-1 h-auto"
+                                                    value={editTaskStr}
+                                                    onChange={e => setEditTaskStr(e.target.value)}
+                                                    onKeyDown={e => handleEditKeyDown(e, q.id)}
+                                                    onBlur={() => saveEdit(q.id)}
+                                                    autoFocus
+                                                />
+                                            ) : (
+                                                <span
+                                                    className="font-semibold text-sm leading-tight flex-1 cursor-text select-none"
+                                                    style={{ wordBreak: 'break-word' }}
+                                                    onClick={() => startEditing(q)}
+                                                >
+                                                    {q.task}
+                                                </span>
+                                            )}
+                                            <div className="flex opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                                <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={trueIndex <= 0} onClick={() => moveUp(q.id)}>↑</button>
+                                                <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={trueIndex >= queue.length - 1} onClick={() => moveDown(q.id)}>↓</button>
+                                                {editingId !== q.id && <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title="Edit" onClick={() => startEditing(q)}>✎</button>}
+                                                <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-red-500 hover:text-white" onClick={() => setQueue(queue.filter(x => x.id !== q.id))}>✕</button>
+                                            </div>
+                                        </div>
+                                        <span className="opacity-60 text-[10px] font-bold uppercase tracking-wider">{q.type} {q.recurring ? "(Recurring)" : ""} {q.idleTime ? `(scheduled ~ ${q.idleTime})` : ''} • ~{startInfo}</span>
+                                    </div>
+                                );
+                            })}
+                        </>
                     );
-                })}
-                {queue.length === 0 && <p className="text-[13px] opacity-50 text-center py-6">Your queue is empty.</p>}
+                })()}
             </div>
 
             <div className="border-t flex flex-col gap-3 shrink-0 bg-black/5" style={{ padding: '1.25rem', borderColor: 'var(--border-ring)' }}>
@@ -158,17 +238,24 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
 
                 <div className="flex gap-2 w-full">
                     {BLOCK_NAMES.map(b => (
-                        <button key={b} className={`pill flex-1 !px-2 !py-2 !text-xs capitalize ${qType === b ? "opacity-100 ring-2 ring-black/10" : "opacity-50"}`} onClick={() => setQType(b)}>{b}</button>
+                        <button key={b} className={`pill flex-1 !px-2 !py-2 !text-xs capitalize transition-all duration-200 ${qType === b ? "bg-black text-white shadow-md scale-105" : "bg-black/5 opacity-70 hover:opacity-100"}`} onClick={() => setQType(b)}>{b}</button>
                     ))}
                 </div>
 
-                <label className="flex items-center gap-2 cursor-pointer w-fit select-none shrink-0 group">
-                    <input type="checkbox" checked={isIdle} onChange={e => setIsIdle(e.target.checked)} className="cursor-pointer w-4 h-4 rounded text-black ring-0 border border-black/20" />
-                    <span className="text-[13px] font-medium opacity-80 group-hover:opacity-100 transition-opacity">Schedule Time</span>
-                </label>
+                <div className="flex items-center gap-4 mt-1">
+                    <label className="flex items-center gap-2 cursor-pointer w-fit select-none shrink-0 group">
+                        <input type="checkbox" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)} className="cursor-pointer w-4 h-4 rounded text-black ring-0 border border-black/20" />
+                        <span className="text-[13px] font-medium opacity-80 group-hover:opacity-100 transition-opacity">Recurring</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer w-fit select-none shrink-0 group">
+                        <input type="checkbox" checked={isIdle} onChange={e => setIsIdle(e.target.checked)} className="cursor-pointer w-4 h-4 rounded text-black ring-0 border border-black/20" />
+                        <span className="text-[13px] font-medium opacity-80 group-hover:opacity-100 transition-opacity">Schedule</span>
+                    </label>
+                </div>
 
                 {isIdle && (
-                    <input type="time" className="task-input w-full px-4 py-2 h-10 text-sm max-w-none shadow-sm border-none bg-white rounded-lg" value={qTime} onChange={e => setQTime(e.target.value)} />
+                    <input type="time" className="task-input flex-1 px-4 py-2 h-10 text-sm max-w-none shadow-sm border-none bg-white rounded-lg" value={qTime} onChange={e => setQTime(e.target.value)} />
                 )}
 
                 <button className="btn w-full py-3 mt-1 font-semibold tracking-wide rounded-lg bg-black text-white shadow-md hover:opacity-90 transition-all border-none" onClick={addQueue}>+ Add to Queue</button>
@@ -179,18 +266,19 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
 
 function Chrome() {
     const { theme, next } = useApp();
-    const [leftOpen, setLeftOpen] = useState(true);
-    const [rightOpen, setRightOpen] = useState(true);
+    const [leftOpen, setLeftOpen] = useState(false);
+    const [rightOpen, setRightOpen] = useState(false);
 
     return (
         <div className="h-screen flex flex-col overflow-hidden" style={{ background: "var(--bg)", color: "var(--text)", fontFamily: "var(--font)" }}>
             <div data-tauri-drag-region className="titlebar flex items-center justify-between px-8 py-5 select-none border-b transition-colors" style={{ borderColor: 'var(--border-ring)' }}>
                 <div className="flex items-center gap-6">
-                    <span className="text-sm font-black opacity-40 hover:opacity-100 transition-opacity tracking-widest pl-2">POMO</span>
+                    <span className="text-sm font-black opacity-40 hover:opacity-100 transition-opacity tracking-widest pl-2">&nbsp;&nbsp;&nbsp;POMO</span>
                 </div>
 
                 <div className="flex gap-2 z-50">
                     <button className="wb w-7 h-7 flex items-center justify-center hover:bg-black/10 transition-colors rounded" onClick={() => (window as any).__TAURI__?.window?.getCurrentWindow().minimize()}>─</button>
+                    <button className="wb w-7 h-7 flex items-center justify-center hover:bg-black/10 transition-colors rounded" onClick={() => (window as any).__TAURI__?.window?.getCurrentWindow().toggleMaximize()}>□</button>
                     <button className="wb close w-7 h-7 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors rounded" onClick={() => (window as any).__TAURI__?.window?.getCurrentWindow().close()}>✕</button>
                 </div>
             </div>
@@ -211,9 +299,96 @@ function Chrome() {
                         </div>
                     </div>
                     <Timer />
+
+                    {/* Sync / Settings Menu */}
+                    <div className="absolute bottom-8 left-8 z-50">
+                        <SyncMenu />
+                    </div>
                 </main>
                 <QueueSidebar isOpen={rightOpen} onToggle={() => setRightOpen(!rightOpen)} />
             </div>
+        </div>
+    );
+}
+
+function SyncMenu() {
+    const [open, setOpen] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleExport = () => {
+        const state = localStorage.getItem("pomo-state");
+        const history = localStorage.getItem("pomo-history");
+        const data = {
+            state: state ? JSON.parse(state) : null,
+            history: history ? JSON.parse(history) : null
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `pomo-export-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setOpen(false);
+    };
+
+    const handleImportClick = () => {
+        fileInputRef.current?.click();
+        setOpen(false);
+    };
+
+    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const data = JSON.parse(event.target?.result as string);
+                if (data.state) localStorage.setItem("pomo-state", JSON.stringify(data.state));
+                if (data.history) localStorage.setItem("pomo-history", JSON.stringify(data.history));
+                window.location.reload();
+            } catch (err) {
+                alert("Invalid configuration file");
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    return (
+        <div className="relative" ref={menuRef}>
+            <button
+                className="w-10 h-10 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-colors shadow-sm cursor-pointer"
+                onClick={() => setOpen(!open)}
+                title="Sync / Config"
+            >
+                <svg className="w-5 h-5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+            </button>
+            {open && (
+                <div className="absolute bottom-full left-0 mb-4 w-52 rounded-xl shadow-xl overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border-ring)", padding: "4px" }}>
+                    <div className="flex flex-col text-[13px] font-medium opacity-90">
+                        <button className="w-full text-left px-4 py-2.5 rounded hover:bg-black/5 transition-colors" onClick={handleExport}>
+                            Export Config (JSON)
+                        </button>
+                        <button className="w-full text-left px-4 py-2.5 rounded hover:bg-black/5 transition-colors mt-1" onClick={handleImportClick}>
+                            Import Config (JSON)
+                        </button>
+                    </div>
+                </div>
+            )}
+            <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleImport} />
         </div>
     );
 }
