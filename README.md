@@ -14,23 +14,35 @@ One button rotates through five completely distinct UI design systems — all li
 | 4 | **Fluent** | Frosted glass, blur effects, Segoe UI |
 | 5 | **Neumorph** | Soft extruded/indented surfaces, dual shadows |
 
+## ⏱️ Time Blocks
+
+| Block | Focus | Break | Use Case |
+|-------|-------|-------|----------|
+| **Mini** | 10 min | 2 min | Quick tasks |
+| **Normal** | 25 min | 5 min | Medium work |
+| **Deep** | 50 min | 10 min | Deep focus |
+
+## 📝 Task Naming & History
+
+Name your current task before starting. Completed focus sessions auto-save to a collapsible history log (persisted, last 50 entries).
+
 ## 🧠 Persistent State
 
-Timer progress, active theme, and work/break mode survive app restarts via `localStorage`.
+Timer progress, active theme, block type, task name, and work/break mode survive app restarts via `localStorage`.
 
 ## 🏗️ Architecture
 
 ```
 src/
 ├── main.tsx        # React entry (3 lines)
-├── App.tsx         # Custom titlebar + layout
-├── Timer.tsx       # SVG ring + MM:SS + controls
-├── ctx.tsx         # Context: timer + theme + persistence
+├── App.tsx         # Custom titlebar + layout + history
+├── Timer.tsx       # SVG ring + block tabs + task input
+├── ctx.tsx         # Context: timer + theme + history + persistence
 ├── themes.ts       # 5 theme CSS-variable maps
 └── index.css       # Tailwind v4 + paradigm overrides
 ```
 
-**6 files. ~150 lines of TypeScript. Zero external state libraries.**
+**6 files. ~200 lines of TypeScript. Zero external state libraries.**
 
 ## 🚀 Dev
 
