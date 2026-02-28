@@ -284,7 +284,7 @@ function Chrome() {
             </div>
             <div className="flex flex-1 overflow-hidden backdrop-blur-3xl" style={{ backdropFilter: 'var(--backdrop)', WebkitBackdropFilter: 'var(--backdrop)' }}>
                 <ActivitySidebar isOpen={leftOpen} onToggle={() => setLeftOpen(!leftOpen)} />
-                <main className="flex-1 min-w-[320px] flex flex-col items-center justify-center p-12 overflow-y-auto relative">
+                <main className="flex-1 min-w-[320px] sm:min-w-[420px] flex flex-col items-center justify-center p-6 sm:p-12 overflow-y-auto relative">
                     <div className="absolute top-8 right-8 z-50">
                         <div
                             className="relative flex items-center justify-center bg-black/10 rounded-full cursor-pointer transition-colors hover:bg-black/20 shadow-inner"
