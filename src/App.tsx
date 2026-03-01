@@ -74,8 +74,10 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
         d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
         return d.toISOString().slice(0, 16);
     });
+    const [qNotes, setQNotes] = useState("");
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editTaskStr, setEditTaskStr] = useState("");
+    const [editNotesStr, setEditNotesStr] = useState("");
 
     const addQueue = () => {
         if (!qTask.trim()) return;
@@ -85,32 +87,42 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
             task: qTask,
             idleTime: isIdle ? qTime : undefined,
             isIdle,
-            recurring: isRecurring
+            recurring: isRecurring,
+            notes: qNotes.trim() || undefined,
+            createdAt: Date.now()
         }]);
         setQTask("");
+        setQNotes("");
         setIsIdle(false);
         setIsRecurring(false);
     };
 
-    const moveUp = (id: string) => {
-        const index = queue.findIndex(q => q.id === id);
-        if (index <= 0) return;
+    const moveUp = (id: string, visibleItems: typeof queue) => {
+        const vIdx = visibleItems.findIndex(q => q.id === id);
+        if (vIdx <= 0) return;
+        const targetId = visibleItems[vIdx - 1].id;
+        const qIdx1 = queue.findIndex(q => q.id === id);
+        const qIdx2 = queue.findIndex(q => q.id === targetId);
         const newQ = [...queue];
-        [newQ[index - 1], newQ[index]] = [newQ[index], newQ[index - 1]];
+        [newQ[qIdx1], newQ[qIdx2]] = [newQ[qIdx2], newQ[qIdx1]];
         setQueue(newQ);
     };
 
-    const moveDown = (id: string) => {
-        const index = queue.findIndex(q => q.id === id);
-        if (index === -1 || index === queue.length - 1) return;
+    const moveDown = (id: string, visibleItems: typeof queue) => {
+        const vIdx = visibleItems.findIndex(q => q.id === id);
+        if (vIdx === -1 || vIdx >= visibleItems.length - 1) return;
+        const targetId = visibleItems[vIdx + 1].id;
+        const qIdx1 = queue.findIndex(q => q.id === id);
+        const qIdx2 = queue.findIndex(q => q.id === targetId);
         const newQ = [...queue];
-        [newQ[index + 1], newQ[index]] = [newQ[index], newQ[index + 1]];
+        [newQ[qIdx1], newQ[qIdx2]] = [newQ[qIdx2], newQ[qIdx1]];
         setQueue(newQ);
     };
 
     const startEditing = (q: typeof queue[0]) => {
         setEditingId(q.id);
         setEditTaskStr(q.task);
+        setEditNotesStr(q.notes || "");
     };
 
     const saveEdit = (id: string) => {
@@ -118,12 +130,15 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
             setEditingId(null);
             return;
         }
-        setQueue(queue.map(q => q.id === id ? { ...q, task: editTaskStr } : q));
+        setQueue(queue.map(q => q.id === id ? { ...q, task: editTaskStr, notes: editNotesStr.trim() || undefined } : q));
         setEditingId(null);
     };
 
     const handleEditKeyDown = (e: React.KeyboardEvent, id: string) => {
-        if (e.key === "Enter") saveEdit(id);
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            saveEdit(id);
+        }
         if (e.key === "Escape") setEditingId(null);
     };
 
@@ -220,13 +235,30 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                     currentTime.setMinutes(currentTime.getMinutes() + bcfg[0] + bcfg[1]);
                                 }
 
-                                const trueIndex = queue.findIndex(x => x.id === q.id);
+                                const vIndex = visibleQueue.findIndex(x => x.id === q.id);
+
+                                const isScheduled = !!q.idleTime;
+
+                                // Check if task has been sitting in queue for > 24 hours
+                                let isOldTask = false;
+                                if (!isScheduled && !q.recurring && q.id) {
+                                    // Use the ID timestamp if possible, otherwise rely on a fallback generic check. 
+                                    // Since tasks are created recently in this session or loaded, we'll try to find an 
+                                    // older item by interpreting its ID or we could add a createdAt field. 
+                                    // Let's add createdAt locally or just mock it for now since we don't track createdAt yet.
+                                    // Wait, true way is checking if it was just added. Let's add a date check to the ID since we generated it via Math.random() we can't.
+                                    // We need to use `idleTime` or fallback. Since we can't reliably know >24h without adding a timestamp to QueuedBlock:
+                                }
+                                // I'll update types.ts to add createdAt to QueuedBlock, and handle the fallback here.
+                                if (q.createdAt) {
+                                    isOldTask = (realNow.getTime() - q.createdAt) > 86400000;
+                                }
 
                                 return (
-                                    <div key={q.id} className="hist-item relative group text-left flex flex-col justify-between gap-3 p-4 rounded transition-colors hover:bg-black/5 shrink-0" style={{ border: '1px solid var(--border-ring)' }}>
+                                    <div key={q.id} className="hist-item relative group text-left flex flex-col justify-between gap-3 p-4 rounded transition-colors hover:bg-black/5 shrink-0" style={{ border: `1px ${isScheduled ? 'double' : 'solid'} ${isOldTask ? 'rgba(239, 68, 68, 0.4)' : 'var(--border-ring)'}`, borderWidth: isScheduled ? '3px' : '1px' }}>
                                         <div className="absolute top-2 right-2 flex items-center bg-[var(--card)]/90 backdrop-blur-md rounded-md shadow-sm border border-[var(--border-ring)] opacity-0 group-hover:opacity-100 transition-opacity z-10 px-1 py-1">
-                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={trueIndex <= 0} onClick={() => moveUp(q.id)}>↑</button>
-                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={trueIndex >= queue.length - 1} onClick={() => moveDown(q.id)}>↓</button>
+                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={vIndex <= 0} onClick={() => moveUp(q.id, visibleQueue)}>↑</button>
+                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={vIndex >= visibleQueue.length - 1} onClick={() => moveDown(q.id, visibleQueue)}>↓</button>
                                             {editingId !== q.id && <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title="Edit" onClick={() => startEditing(q)}>✎</button>}
                                             <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title={q.archived ? "Unarchive" : "Archive"} onClick={() => setQueue(queue.map(x => x.id === q.id ? { ...x, archived: !x.archived } : x))}>{q.archived ? "⇧" : "⇩"}</button>
                                             <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-red-500 hover:text-white" onClick={() => setQueue(queue.filter(x => x.id !== q.id))}>✕</button>
@@ -235,19 +267,48 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                         <div className="flex justify-between w-full items-start gap-4 pr-1">
                                             <div className="flex-1 font-bold text-[14px] sm:text-[15px] leading-tight text-left cursor-text select-none text-[var(--text)]" style={{ wordBreak: 'break-word', minHeight: '1.5rem' }}>
                                                 {editingId === q.id ? (
-                                                    <input
-                                                        className="task-input w-full text-sm font-semibold !p-1 -ml-1 h-auto"
-                                                        value={editTaskStr}
-                                                        onChange={e => setEditTaskStr(e.target.value)}
-                                                        onKeyDown={e => handleEditKeyDown(e, q.id)}
-                                                        onBlur={() => saveEdit(q.id)}
-                                                        autoFocus
-                                                    />
+                                                    <div className="flex flex-col gap-2 w-full pr-8">
+                                                        <input
+                                                            className="task-input w-full text-sm font-semibold !p-1 -ml-1 h-auto"
+                                                            value={editTaskStr}
+                                                            onChange={e => setEditTaskStr(e.target.value)}
+                                                            onKeyDown={e => handleEditKeyDown(e, q.id)}
+                                                            autoFocus
+                                                        />
+                                                        <textarea
+                                                            className="task-input w-full text-xs font-normal !p-1 -ml-1 h-auto resize-none min-h-[60px]"
+                                                            value={editNotesStr}
+                                                            onChange={e => setEditNotesStr(e.target.value)}
+                                                            onKeyDown={e => handleEditKeyDown(e, q.id)}
+                                                            placeholder="Notes (HTML supported)..."
+                                                        />
+                                                        <div className="flex gap-2 justify-start mt-1 mb-2">
+                                                            <button className="btn highlight !py-1 !px-3 !text-[11px] rounded" onClick={() => saveEdit(q.id)}>Save</button>
+                                                            <button className="btn secondary !py-1 !px-3 !text-[11px] rounded" onClick={() => setEditingId(null)}>Cancel</button>
+                                                        </div>
+                                                    </div>
                                                 ) : (
-                                                    <span onClick={() => startEditing(q)}>{q.task}</span>
+                                                    <div className="flex flex-col gap-1 w-full pb-1">
+                                                        <span>
+                                                            <span onClick={() => startEditing(q)}>{q.task}</span>
+                                                            {q.recurring && (
+                                                                <span className="ml-1 inline-flex items-center justify-center align-middle mb-0.5 opacity-80" style={{ color: 'var(--accent)' }} title="Recurring">
+                                                                    &nbsp;
+                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                                    </svg>
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                        {q.notes && (
+                                                            <div
+                                                                className="text-xs opacity-70 mt-1.5 font-normal leading-relaxed overflow-hidden"
+                                                                dangerouslySetInnerHTML={{ __html: q.notes }}
+                                                                onClick={() => startEditing(q)}
+                                                            />
+                                                        )}
+                                                    </div>
                                                 )}
-                                                {q.recurring && <span className="ml-2 text-[9px] font-black uppercase text-[#ffffff] bg-[var(--accent)] px-1.5 py-0.5 rounded-full inline-block align-middle mb-0.5 opacity-80" style={{ color: '#ffffff', backgroundColor: 'var(--accent)' }}>Recurring</span>}
-                                                {q.idleTime && <span className="ml-2 text-[9px] font-black uppercase text-[var(--text)] bg-[var(--text)]/10 px-1.5 py-0.5 rounded-full inline-block align-middle mb-0.5 opacity-80 border border-[var(--text)]/20" style={{ color: 'var(--text)', borderColor: 'var(--text)' }}>Sched @ {q.idleTime.includes("T") ? new Date(q.idleTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : q.idleTime}</span>}
                                             </div>
 
                                             <div className="shrink-0 text-right mt-0.5" style={{ color: 'var(--text)' }}>
@@ -286,6 +347,7 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                 <p className="text-xs font-bold uppercase tracking-wider opacity-60 m-0">Add block</p>
 
                 <input className="task-input w-full !text-left px-4 py-2 text-sm max-w-none border-none bg-white rounded-lg shadow-sm mb-3" placeholder="Task name..." value={qTask} onChange={e => setQTask(e.target.value)} />
+                <textarea className="task-input w-full !text-left px-4 py-2 text-xs max-w-none border-none bg-white rounded-lg shadow-sm mb-3 resize-none min-h-[50px]" placeholder="Notes (HTML supported)..." value={qNotes} onChange={e => setQNotes(e.target.value)} />
 
                 <div className="flex gap-2 w-full">
                     {BLOCK_NAMES.map(b => (
@@ -389,12 +451,12 @@ function Chrome() {
                 const currentLogical = currentPhysical.toLogical(factor);
 
                 // Base app width is 460 to ensure no overlap for Timer controls
-                const leftWidth = leftOpen ? 320 : 56;
-                const rightWidth = rightOpen ? 320 : 56;
+                const leftWidth = leftOpen ? 360 : 56;
+                const rightWidth = rightOpen ? 360 : 56;
 
                 // Allow dynamic expansion and shrinking
                 // Base 500 prevents Timer from crushing absolute buttons
-                const targetWidth = 500 + leftWidth + rightWidth;
+                const targetWidth = 720 + leftWidth + rightWidth;
 
                 // Explicitly set the width so closing a sidebar visually snaps it shut
                 await appWindow.setSize(new LogicalSize(targetWidth, currentLogical.height));
@@ -454,6 +516,7 @@ function Chrome() {
 
 function SyncMenu() {
     const [open, setOpen] = useState(false);
+    const [exportNotice, setExportNotice] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -482,6 +545,8 @@ function SyncMenu() {
         a.click();
         URL.revokeObjectURL(url);
         setOpen(false);
+        setExportNotice(`Saved to Downloads: ${a.download}`);
+        setTimeout(() => setExportNotice(null), 3500);
     };
 
     const handleImportClick = () => {
@@ -518,7 +583,7 @@ function SyncMenu() {
                 </svg>
             </button>
             {open && (
-                <div className="absolute bottom-full left-0 mb-4 w-52 rounded-xl shadow-xl overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border-ring)", padding: "4px" }}>
+                <div className="absolute bottom-full left-0 mb-4 w-52 rounded-sm shadow-xl overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border-ring)", padding: "4px" }}>
                     <div className="flex flex-col text-[13px] font-medium opacity-90">
                         <button className="w-full text-left px-4 py-2.5 rounded hover:bg-black/5 transition-colors" onClick={handleExport}>
                             Export Config (JSON)
@@ -530,6 +595,12 @@ function SyncMenu() {
                 </div>
             )}
             <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleImport} />
+
+            {exportNotice && (
+                <div className="absolute bottom-1/2 left-16 shrink-0 w-[240px] px-4 py-2.5 rounded-lg shadow-lg text-xs font-semibold bg-green-500/10 text-green-700 border border-green-500/20 backdrop-blur-md animate-fade-in z-50 pointer-events-none">
+                    {exportNotice}
+                </div>
+            )}
         </div>
     );
 }

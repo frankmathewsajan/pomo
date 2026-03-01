@@ -14,11 +14,12 @@ type S = {
     durations: Record<Block, readonly [number, number]>;
     targetMs: number | null; // Absolute time when the current block ends
     pausedLeftMs: number | null; // Milliseconds remaining when paused
+    notes: string;
 };
 
 const def: S = {
     theme: 0, running: false, mode: "w", block: "normal", task: "", queue: [],
-    durations: DEF_BLOCKS, targetMs: null, pausedLeftMs: DEF_BLOCKS.normal[0] * 60000
+    durations: DEF_BLOCKS, targetMs: null, pausedLeftMs: DEF_BLOCKS.normal[0] * 60000, notes: ""
 };
 const load = (): S => {
     try {
@@ -39,6 +40,7 @@ type Ctx = S & {
     next: () => void;
     setBlock: (b: Block) => void;
     setTask: (t: string) => void;
+    setNotes: (n: string) => void;
     setQueue: (q: QueuedBlock[]) => void;
     setDuration: (b: Block, w: number, br: number) => void;
 };
@@ -140,19 +142,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
                         target = new Date(ct.getFullYear(), ct.getMonth(), ct.getDate(), h, m).getTime();
                         if (target <= ct.getTime()) target += 86400000;
                     }
-                    return { ...p, mode: "idle", block: qItem.type as Block, task: qItem.task, queue: nextQ, running: true, targetMs: target, pausedLeftMs: null };
+                    return { ...p, mode: "idle", block: qItem.type as Block, task: qItem.task, notes: qItem.notes || "", queue: nextQ, running: true, targetMs: target, pausedLeftMs: null };
                 } else {
                     const dur = (p.durations[qItem.type as Block] || [25, 5])[0] * 60000;
-                    return { ...p, mode: "w", block: qItem.type as Block, task: qItem.task, queue: nextQ, running: true, targetMs: Date.now() + dur, pausedLeftMs: null };
+                    return { ...p, mode: "w", block: qItem.type as Block, task: qItem.task, notes: qItem.notes || "", queue: nextQ, running: true, targetMs: Date.now() + dur, pausedLeftMs: null };
                 }
             } else {
                 const [w] = p.durations[p.block as Block] || [10, 2];
-                return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "" };
+                return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "", notes: "" };
             }
         }),
         next: () => set(p => ({ ...p, theme: (p.theme + 1) % T.length })),
         setBlock: (b) => set(p => ({ ...p, block: b, mode: "w", running: false, targetMs: null, pausedLeftMs: p.durations[b][0] * 60000 })),
         setTask: (t) => set(p => ({ ...p, task: t })),
+        setNotes: (n) => set(p => ({ ...p, notes: n })),
         setQueue: (q) => set(p => ({ ...p, queue: q })),
         setDuration: (b, w, br) => set(p => ({ ...p, durations: { ...p.durations, [b]: [w, br] } }))
     };

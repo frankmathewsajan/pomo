@@ -10,6 +10,8 @@ export type QueuedBlock = {
     idleTime?: string; // e.g. "2026-03-01T16:00"
     recurring?: boolean;
     archived?: boolean;
+    notes?: string;
+    createdAt?: number;
 };
 
 export type HistoryStatus = "completed" | "early" | "aborted" | "scheduled";
@@ -19,4 +21,5 @@ export type Entry = {
     block: Block;
     at: number;
     status: HistoryStatus;
+    notes?: string;
 };
