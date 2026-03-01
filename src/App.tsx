@@ -61,6 +61,17 @@ function ActivitySidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () =
     );
 }
 
+function Toggle({ on, onToggle, label }: { on: boolean; onToggle: () => void; label: string }) {
+    return (
+        <label className="flex items-center gap-3 cursor-pointer w-fit select-none shrink-0 group" onClick={onToggle}>
+            <div className="relative w-8 h-4 rounded-full transition-colors duration-300" style={{ backgroundColor: on ? 'var(--accent)' : 'transparent', border: '1px solid var(--border-ring)' }}>
+                <div className={`absolute top-0.5 rounded-full shadow-sm transform transition-transform duration-300 ${on ? 'translate-x-4' : 'translate-x-0'}`} style={{ width: '10px', height: '10px', left: '2px', backgroundColor: on ? '#ffffff' : 'var(--text)', opacity: on ? 1 : 0.7 }} />
+            </div>
+            <span className="text-[12px] font-bold tracking-wide uppercase opacity-70 group-hover:opacity-100 transition-opacity">{label}</span>
+        </label>
+    );
+}
+
 function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => void }) {
     const { queue, setQueue, timeLeftMs, mode, block, durations } = useApp();
     const [qType, setQType] = useState<Block>("normal");
@@ -97,26 +108,15 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
         setIsRecurring(false);
     };
 
-    const moveUp = (id: string, visibleItems: typeof queue) => {
-        const vIdx = visibleItems.findIndex(q => q.id === id);
-        if (vIdx <= 0) return;
-        const targetId = visibleItems[vIdx - 1].id;
-        const qIdx1 = queue.findIndex(q => q.id === id);
-        const qIdx2 = queue.findIndex(q => q.id === targetId);
-        const newQ = [...queue];
-        [newQ[qIdx1], newQ[qIdx2]] = [newQ[qIdx2], newQ[qIdx1]];
-        setQueue(newQ);
-    };
-
-    const moveDown = (id: string, visibleItems: typeof queue) => {
-        const vIdx = visibleItems.findIndex(q => q.id === id);
-        if (vIdx === -1 || vIdx >= visibleItems.length - 1) return;
-        const targetId = visibleItems[vIdx + 1].id;
-        const qIdx1 = queue.findIndex(q => q.id === id);
-        const qIdx2 = queue.findIndex(q => q.id === targetId);
-        const newQ = [...queue];
-        [newQ[qIdx1], newQ[qIdx2]] = [newQ[qIdx2], newQ[qIdx1]];
-        setQueue(newQ);
+    const swapInQueue = (id: string, dir: -1 | 1, visible: typeof queue) => {
+        const vi = visible.findIndex(q => q.id === id);
+        const ti = vi + dir;
+        if (ti < 0 || ti >= visible.length) return;
+        const qi1 = queue.findIndex(q => q.id === id);
+        const qi2 = queue.findIndex(q => q.id === visible[ti].id);
+        const next = [...queue];
+        [next[qi1], next[qi2]] = [next[qi2], next[qi1]];
+        setQueue(next);
     };
 
     const startEditing = (q: typeof queue[0]) => {
@@ -235,30 +235,16 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                     currentTime.setMinutes(currentTime.getMinutes() + bcfg[0] + bcfg[1]);
                                 }
 
-                                const vIndex = visibleQueue.findIndex(x => x.id === q.id);
-
                                 const isScheduled = !!q.idleTime;
-
-                                // Check if task has been sitting in queue for > 24 hours
-                                let isOldTask = false;
-                                if (!isScheduled && !q.recurring && q.id) {
-                                    // Use the ID timestamp if possible, otherwise rely on a fallback generic check. 
-                                    // Since tasks are created recently in this session or loaded, we'll try to find an 
-                                    // older item by interpreting its ID or we could add a createdAt field. 
-                                    // Let's add createdAt locally or just mock it for now since we don't track createdAt yet.
-                                    // Wait, true way is checking if it was just added. Let's add a date check to the ID since we generated it via Math.random() we can't.
-                                    // We need to use `idleTime` or fallback. Since we can't reliably know >24h without adding a timestamp to QueuedBlock:
-                                }
-                                // I'll update types.ts to add createdAt to QueuedBlock, and handle the fallback here.
-                                if (q.createdAt) {
-                                    isOldTask = (realNow.getTime() - q.createdAt) > 86400000;
-                                }
+                                const isOldTask = !isScheduled && !q.recurring && q.createdAt
+                                    ? (realNow.getTime() - q.createdAt) > 86400000
+                                    : false;
 
                                 return (
                                     <div key={q.id} className="hist-item relative group text-left flex flex-col justify-between gap-3 p-4 rounded transition-colors hover:bg-black/5 shrink-0" style={{ border: `1px ${isScheduled ? 'double' : 'solid'} ${isOldTask ? 'rgba(239, 68, 68, 0.4)' : 'var(--border-ring)'}`, borderWidth: isScheduled ? '3px' : '1px' }}>
                                         <div className="absolute top-2 right-2 flex items-center bg-[var(--card)]/90 backdrop-blur-md rounded-md shadow-sm border border-[var(--border-ring)] opacity-0 group-hover:opacity-100 transition-opacity z-10 px-1 py-1">
-                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={vIndex <= 0} onClick={() => moveUp(q.id, visibleQueue)}>↑</button>
-                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={vIndex >= visibleQueue.length - 1} onClick={() => moveDown(q.id, visibleQueue)}>↓</button>
+                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={i <= 0} onClick={() => swapInQueue(q.id, -1, visibleQueue)}>↑</button>
+                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={i >= visibleQueue.length - 1} onClick={() => swapInQueue(q.id, 1, visibleQueue)}>↓</button>
                                             {editingId !== q.id && <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title="Edit" onClick={() => startEditing(q)}>✎</button>}
                                             <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title={q.archived ? "Unarchive" : "Archive"} onClick={() => setQueue(queue.map(x => x.id === q.id ? { ...x, archived: !x.archived } : x))}>{q.archived ? "⇧" : "⇩"}</button>
                                             <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-red-500 hover:text-white" onClick={() => setQueue(queue.filter(x => x.id !== q.id))}>✕</button>
@@ -311,20 +297,16 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                                 )}
                                             </div>
 
-                                            <div className="shrink-0 text-right mt-0.5" style={{ color: 'var(--text)' }}>
+                                            <div className="shrink-0 text-right mt-0.5">
                                                 <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-widest opacity-60">
-                                                    {q.type} ({(durations[q.type as keyof typeof durations] || [25, 5])[0]}m)
+                                                    {q.type} ({(durations[q.type] || [25, 5])[0]}m)
                                                 </span>
                                             </div>
                                         </div>
 
-                                        <div className="flex justify-between w-full items-end mt-1" style={{ color: 'var(--text)' }}>
-                                            <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">
-                                                ~{startInfoStr}
-                                            </span>
-                                            <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">
-                                                ~{endInfoStr}
-                                            </span>
+                                        <div className="flex justify-between w-full items-end mt-1">
+                                            <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">~{startInfoStr}</span>
+                                            <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">~{endInfoStr}</span>
                                         </div>
                                     </div>
                                 );
@@ -372,31 +354,8 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                 </div>
 
                 <div className="flex items-center gap-4 mt-1">
-                    <label className="flex items-center gap-3 cursor-pointer w-fit select-none shrink-0 group" onClick={() => setIsRecurring(!isRecurring)}>
-                        <div
-                            className="relative w-8 h-4 rounded-full transition-colors duration-300"
-                            style={{ backgroundColor: isRecurring ? 'var(--accent)' : 'transparent', border: '1px solid var(--border-ring)' }}
-                        >
-                            <div
-                                className={`absolute top-0.5 rounded-full shadow-sm transform transition-transform duration-300 ${isRecurring ? 'translate-x-4' : 'translate-x-0'}`}
-                                style={{ width: '10px', height: '10px', left: '2px', backgroundColor: isRecurring ? '#ffffff' : 'var(--text)', opacity: isRecurring ? 1 : 0.7 }}
-                            />
-                        </div>
-                        <span className="text-[12px] font-bold tracking-wide uppercase opacity-70 group-hover:opacity-100 transition-opacity">Recurring</span>
-                    </label>
-
-                    <label className="flex items-center gap-3 cursor-pointer w-fit select-none shrink-0 group" onClick={() => setIsIdle(!isIdle)}>
-                        <div
-                            className="relative w-8 h-4 rounded-full transition-colors duration-300"
-                            style={{ backgroundColor: isIdle ? 'var(--accent)' : 'transparent', border: '1px solid var(--border-ring)' }}
-                        >
-                            <div
-                                className={`absolute top-0.5 rounded-full shadow-sm transform transition-transform duration-300 ${isIdle ? 'translate-x-4' : 'translate-x-0'}`}
-                                style={{ width: '10px', height: '10px', left: '2px', backgroundColor: isIdle ? '#ffffff' : 'var(--text)', opacity: isIdle ? 1 : 0.7 }}
-                            />
-                        </div>
-                        <span className="text-[12px] font-bold tracking-wide uppercase opacity-70 group-hover:opacity-100 transition-opacity">Schedule</span>
-                    </label>
+                    <Toggle on={isRecurring} onToggle={() => setIsRecurring(!isRecurring)} label="Recurring" />
+                    <Toggle on={isIdle} onToggle={() => setIsIdle(!isIdle)} label="Schedule" />
                 </div>
 
                 {isIdle && (

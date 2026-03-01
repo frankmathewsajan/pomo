@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { T } from "./themes";
-import { type Block, type QueuedBlock, type Entry, type HistoryStatus, DEF_BLOCKS, BLOCK_NAMES } from "./types";
+import { type Block, type QueuedBlock, type Entry, DEF_BLOCKS } from "./types";
 
 const K = "pomo-state", HK = "pomo-history";
 
@@ -63,13 +63,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return () => clearInterval(id);
     }, []);
 
+    const startBreak = (c: S) => {
+        const b = (c.durations[c.block as Block] || [0, 0])[1];
+        set({ ...c, mode: "b", running: true, targetMs: Date.now() + b * 60000, pausedLeftMs: null });
+    };
+
     const completeBlock = () => {
         const c = ref.current;
         if (c.mode === "w") {
-            setHistory(h => [{ task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "completed" as HistoryStatus }, ...h].slice(0, 50));
-            const bcfg = c.durations[c.block as Block] || [0, 0];
-            const b = bcfg[1];
-            set({ ...c, mode: "b", running: true, targetMs: Date.now() + b * 60000, pausedLeftMs: null });
+            setHistory(h => [{ task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "completed" as const }, ...h].slice(0, 50));
+            startBreak(c);
         } else if (c.mode === "b") {
             set({ ...c, running: false, targetMs: null, pausedLeftMs: 0 });
         } else if (c.mode === "idle") {
@@ -109,10 +112,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         finish: () => {
             const c = ref.current;
             if (c.mode !== "w") return;
-            setHistory(h => [{ task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "early" as HistoryStatus }, ...h].slice(0, 50));
-            const bcfg = c.durations[c.block as Block] || [0, 0];
-            const b = bcfg[1];
-            set({ ...c, mode: "b", running: true, targetMs: Date.now() + b * 60000, pausedLeftMs: null });
+            setHistory(h => [{ task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "early" as const }, ...h].slice(0, 50));
+            startBreak(c);
         },
         continueSame: () => set(p => {
             const dur = (p.durations[p.block as Block] || [25, 5])[0] * 60000;

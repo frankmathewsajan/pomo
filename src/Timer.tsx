@@ -6,6 +6,17 @@ import { isPermissionGranted, requestPermission, sendNotification } from '@tauri
 const R = 90, C = 2 * Math.PI * R;
 const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
+async function notify(title: string, body: string) {
+    if (typeof window === 'undefined' || !(window as any).__TAURI__) return;
+    try {
+        let ok = await isPermissionGranted();
+        if (!ok) ok = (await requestPermission()) === 'granted';
+        if (ok) sendNotification({ title, body });
+    } catch (e) {
+        console.error("Notification error:", e);
+    }
+}
+
 export default function Timer() {
     const { timeLeftMs, running, mode, block, task, notes, queue, toggle, reset, finish, continueSame, nextInQueue, setBlock, setTask, setNotes, durations } = useApp();
     const displaySec = Math.ceil(timeLeftMs / 1000);
@@ -28,23 +39,6 @@ export default function Timer() {
             notified90.current = false;
             notified100.current = false;
         }
-
-        const notify = async (title: string, body: string) => {
-            if (typeof window === 'undefined' || !(window as any).__TAURI__) return;
-            try {
-                let permissionGranted = await isPermissionGranted();
-                if (!permissionGranted) {
-                    const permission = await requestPermission();
-                    permissionGranted = permission === 'granted';
-                }
-                if (permissionGranted) {
-                    sendNotification({ title, body });
-                }
-            } catch (err) {
-                console.error("Notification error:", err);
-            }
-        };
-
         if (running && mode === "w") {
             if (progress >= 0.9 && !notified90.current && progress < 1.0) {
                 notified90.current = true;
