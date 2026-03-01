@@ -1,8 +1,16 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { T } from "./themes";
 import { type Block, type QueuedBlock, type Entry, DEF_BLOCKS } from "./types";
+import { playStartSound } from "./sounds";
 
 const K = "pomo-state", HK = "pomo-history";
+
+type PendingNext = {
+    type: Block;
+    task: string;
+    notes: string;
+    idleTime?: string;
+} | null;
 
 type S = {
     theme: number;
@@ -15,11 +23,13 @@ type S = {
     targetMs: number | null; // Absolute time when the current block ends
     pausedLeftMs: number | null; // Milliseconds remaining when paused
     notes: string;
+    pendingNext: PendingNext;
 };
 
 const def: S = {
     theme: 0, running: false, mode: "w", block: "normal", task: "", queue: [],
-    durations: DEF_BLOCKS, targetMs: null, pausedLeftMs: DEF_BLOCKS.normal[0] * 60000, notes: ""
+    durations: DEF_BLOCKS, targetMs: null, pausedLeftMs: DEF_BLOCKS.normal[0] * 60000, notes: "",
+    pendingNext: null
 };
 const load = (): S => {
     try {
@@ -37,6 +47,7 @@ type Ctx = S & {
     finish: () => void;
     continueSame: () => void;
     nextInQueue: () => void;
+    cancelPending: () => void;
     next: () => void;
     setBlock: (b: Block) => void;
     setTask: (t: string) => void;
@@ -68,13 +79,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
         set({ ...c, mode: "b", running: true, targetMs: Date.now() + b * 60000, pausedLeftMs: null });
     };
 
+    const startPendingTask = (c: S) => {
+        const p = c.pendingNext;
+        if (!p) return;
+        playStartSound();
+        if (p.idleTime) {
+            let target: number;
+            if (p.idleTime.includes("T")) {
+                target = new Date(p.idleTime).getTime();
+            } else {
+                const ct = new Date();
+                const [h, m] = p.idleTime.split(":").map(Number);
+                target = new Date(ct.getFullYear(), ct.getMonth(), ct.getDate(), h, m).getTime();
+                if (target <= ct.getTime()) target += 86400000;
+            }
+            set({ ...c, mode: "idle", block: p.type, task: p.task, notes: p.notes, running: true, targetMs: target, pausedLeftMs: null, pendingNext: null });
+        } else {
+            const dur = (c.durations[p.type] || [25, 5])[0] * 60000;
+            set({ ...c, mode: "w", block: p.type, task: p.task, notes: p.notes, running: true, targetMs: Date.now() + dur, pausedLeftMs: null, pendingNext: null });
+        }
+    };
+
     const completeBlock = () => {
         const c = ref.current;
         if (c.mode === "w") {
             setHistory(h => [{ task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "completed" as const }, ...h].slice(0, 50));
             startBreak(c);
         } else if (c.mode === "b") {
-            set({ ...c, running: false, targetMs: null, pausedLeftMs: 0 });
+            if (c.pendingNext) {
+                startPendingTask(c);
+            } else {
+                set({ ...c, running: false, targetMs: null, pausedLeftMs: 0 });
+            }
         } else if (c.mode === "idle") {
             const dur = (c.durations[c.block as Block] || [10, 2])[0] * 60000;
             set({ ...c, mode: "w", running: true, targetMs: Date.now() + dur, pausedLeftMs: null });
@@ -133,6 +169,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     nextQ = nextQ.map(q => ({ ...q, archived: false }));
                 }
 
+                // During break that's still running: queue the task to start after break ends
+                if (p.mode === "b" && p.running) {
+                    return {
+                        ...p,
+                        queue: nextQ,
+                        pendingNext: {
+                            type: qItem.type as Block,
+                            task: qItem.task,
+                            notes: qItem.notes || "",
+                            idleTime: qItem.idleTime
+                        }
+                    };
+                }
+
+                // Not in break — start immediately (e.g. from idle state)
                 if (qItem.idleTime) {
                     let target: number;
                     if (qItem.idleTime.includes("T")) {
@@ -143,15 +194,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
                         target = new Date(ct.getFullYear(), ct.getMonth(), ct.getDate(), h, m).getTime();
                         if (target <= ct.getTime()) target += 86400000;
                     }
-                    return { ...p, mode: "idle", block: qItem.type as Block, task: qItem.task, notes: qItem.notes || "", queue: nextQ, running: true, targetMs: target, pausedLeftMs: null };
+                    return { ...p, mode: "idle", block: qItem.type as Block, task: qItem.task, notes: qItem.notes || "", queue: nextQ, running: true, targetMs: target, pausedLeftMs: null, pendingNext: null };
                 } else {
                     const dur = (p.durations[qItem.type as Block] || [25, 5])[0] * 60000;
-                    return { ...p, mode: "w", block: qItem.type as Block, task: qItem.task, notes: qItem.notes || "", queue: nextQ, running: true, targetMs: Date.now() + dur, pausedLeftMs: null };
+                    return { ...p, mode: "w", block: qItem.type as Block, task: qItem.task, notes: qItem.notes || "", queue: nextQ, running: true, targetMs: Date.now() + dur, pausedLeftMs: null, pendingNext: null };
                 }
             } else {
                 const [w] = p.durations[p.block as Block] || [10, 2];
-                return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "", notes: "" };
+                return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "", notes: "", pendingNext: null };
             }
+        }),
+        cancelPending: () => set(p => {
+            if (!p.pendingNext) return { ...p, pendingNext: null };
+            const restored: QueuedBlock = {
+                id: Math.random().toString(36).substring(7),
+                type: p.pendingNext.type,
+                task: p.pendingNext.task,
+                notes: p.pendingNext.notes,
+                idleTime: p.pendingNext.idleTime,
+            };
+            return { ...p, pendingNext: null, queue: [restored, ...p.queue] };
         }),
         next: () => set(p => ({ ...p, theme: (p.theme + 1) % T.length })),
         setBlock: (b) => set(p => ({ ...p, block: b, mode: "w", running: false, targetMs: null, pausedLeftMs: p.durations[b][0] * 60000 })),

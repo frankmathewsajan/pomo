@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "./ctx";
 import { BLOCK_NAMES, type Block } from "./types";
+import { play90Sound, play100Sound } from "./sounds";
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
 
 const R = 90, C = 2 * Math.PI * R;
@@ -18,7 +19,7 @@ async function notify(title: string, body: string) {
 }
 
 export default function Timer() {
-    const { timeLeftMs, running, mode, block, task, notes, queue, toggle, reset, finish, continueSame, nextInQueue, setBlock, setTask, setNotes, durations } = useApp();
+    const { timeLeftMs, running, mode, block, task, notes, queue, pendingNext, toggle, reset, finish, continueSame, nextInQueue, cancelPending, setBlock, setTask, setNotes, durations } = useApp();
     const displaySec = Math.ceil(timeLeftMs / 1000);
     const [w, b] = mode === "idle" ? [0, 0] : durations[block as Block] || [0, 0];
     const totalMs = mode === "idle" ? 1 : (mode === "w" ? w : b) * 60000;
@@ -42,10 +43,12 @@ export default function Timer() {
         if (running && mode === "w") {
             if (progress >= 0.9 && !notified90.current && progress < 1.0) {
                 notified90.current = true;
+                play90Sound();
                 notify("Almost done!", `Your ${block} block is 90% complete.`);
             }
             if (progress >= 1.0 && !notified100.current) {
                 notified100.current = true;
+                play100Sound();
                 notify("Block complete!", `Your ${block} block has finished.`);
             }
         }
@@ -109,15 +112,31 @@ export default function Timer() {
 
             {mode === "b" && (
                 <div className="flex flex-col items-center gap-4 w-full">
-                    <p className="text-sm opacity-60 font-medium tracking-wide text-center">Take a break. Or optionally skip to:</p>
+                    {pendingNext ? (
+                        <div className="flex flex-col items-center gap-2 w-full max-w-[320px]">
+                            <p className="text-sm font-semibold tracking-wide text-center" style={{ color: "var(--accent)" }}>
+                                ▶ Up next: <span className="font-bold">{pendingNext.task || "Untitled"}</span>
+                                <span className="opacity-60 text-xs ml-1">({pendingNext.type})</span>
+                            </p>
+                            <p className="text-xs opacity-50 text-center">Starts automatically when break ends</p>
+                            <button
+                                className="btn secondary transition-transform !text-xs !py-1.5 !px-4 opacity-70 hover:opacity-100"
+                                onClick={cancelPending}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    ) : (
+                        <p className="text-sm opacity-60 font-medium tracking-wide text-center">Take a break. Or optionally skip to:</p>
+                    )}
                     <div className="flex flex-col sm:flex-row gap-3 w-full max-w-[320px]">
                         <button className="btn secondary transition-transform flex-1 !text-sm !py-2.5 sm:!py-3" onClick={continueSame}>Continue Same</button>
                         <button
                             className="btn highlight transition-transform flex-1 !text-sm !py-2.5 sm:!py-3 disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={nextInQueue}
-                            disabled={queue.length === 0}
+                            disabled={queue.length === 0 || !!pendingNext}
                         >
-                            Next in Queue
+                            {pendingNext ? "Queued ✓" : "Next in Queue"}
                         </button>
                     </div>
                 </div>
