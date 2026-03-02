@@ -127,7 +127,7 @@ export default function Timer() {
                             </button>
                         </div>
                     ) : (
-                        <p className="text-sm opacity-60 font-medium tracking-wide text-center">Take a break. Or optionally skip to:</p>
+                        <p className="text-sm opacity-60 font-medium tracking-wide text-center">Take a break... or optionally skip to:</p>
                     )}
                     <div className="flex flex-col sm:flex-row gap-3 w-full max-w-[320px]">
                         <button className="btn secondary transition-transform flex-1 !text-sm !py-2.5 sm:!py-3" onClick={continueSame}>Continue Same</button>

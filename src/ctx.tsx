@@ -152,14 +152,96 @@ export function AppProvider({ children }: { children: ReactNode }) {
             startBreak(c);
         },
         continueSame: () => set(p => {
+            if (p.mode === "b" && p.running) {
+                return {
+                    ...p,
+                    pendingNext: {
+                        type: p.block as Block,
+                        task: p.task,
+                        notes: p.notes,
+                        idleTime: undefined
+                    }
+                };
+            }
             const dur = (p.durations[p.block as Block] || [25, 5])[0] * 60000;
-            return { ...p, mode: "w", running: true, targetMs: Date.now() + dur, pausedLeftMs: null };
+            return { ...p, mode: "w", running: true, targetMs: Date.now() + dur, pausedLeftMs: null, pendingNext: null };
         }),
         nextInQueue: () => set(p => {
             const activeQueue = p.queue.filter(q => !q.archived);
             const hasNormal = activeQueue.some(q => !q.recurring);
-            const qIndex = p.queue.findIndex(q => !q.archived && (hasNormal ? !q.recurring : true));
-            const qItem = p.queue[qIndex];
+            const selectable = p.queue.filter(q => !q.archived && (hasNormal ? !q.recurring : true));
+
+            if (selectable.length === 0) {
+                const [w] = p.durations[p.block as Block] || [10, 2];
+                return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "", notes: "", pendingNext: null };
+            }
+
+            const getFixedTarget = (idleTime: string) => {
+                if (idleTime.includes("T")) return new Date(idleTime);
+                const target = new Date();
+                const [h, m] = idleTime.split(":").map(Number);
+                target.setHours(h, m, 0, 0);
+                if (target.getTime() <= Date.now()) target.setTime(target.getTime() + 86400000);
+                return target;
+            };
+
+            const fixedBlocks = selectable.filter(q => q.idleTime).map(q => {
+                const target = getFixedTarget(q.idleTime!);
+                const bcfg = p.durations[q.type as keyof typeof p.durations] || [25, 5];
+                const end = new Date(target.getTime());
+                end.setMinutes(end.getMinutes() + bcfg[0] + bcfg[1]);
+                return { id: q.id, start: target.getTime(), end: end.getTime() };
+            });
+
+            const resolvedMap = new Map<string, number>();
+            selectable.forEach(q => {
+                if (q.idleTime) resolvedMap.set(q.id, getFixedTarget(q.idleTime).getTime());
+            });
+
+            let timeLeftMs = p.running && p.targetMs ? Math.max(0, p.targetMs - Date.now()) : (p.pausedLeftMs || 0);
+            let iterTime = new Date();
+            iterTime.setSeconds(iterTime.getSeconds() + Math.ceil(timeLeftMs / 1000));
+            if (p.mode === "w" && p.block !== "idle") {
+                const bcfg = p.durations[p.block as Block] || [0, 0];
+                iterTime.setMinutes(iterTime.getMinutes() + bcfg[1]);
+            }
+
+            selectable.forEach(q => {
+                if (q.idleTime) return;
+                if (iterTime.getTime() < Date.now()) iterTime = new Date();
+
+                const bcfg = p.durations[q.type as keyof typeof p.durations] || [25, 5];
+                const blockTotalMs = (bcfg[0] + bcfg[1]) * 60000;
+
+                let validStart = new Date(iterTime.getTime());
+                let overlap = true;
+                while (overlap && fixedBlocks.length > 0) {
+                    overlap = false;
+                    const tentativeEnd = new Date(validStart.getTime() + blockTotalMs);
+                    for (const fb of fixedBlocks) {
+                        if (tentativeEnd.getTime() > fb.start && validStart.getTime() < fb.end) {
+                            validStart = new Date(fb.end);
+                            overlap = true;
+                            break;
+                        }
+                    }
+                }
+                resolvedMap.set(q.id, validStart.getTime());
+                iterTime = new Date(validStart.getTime() + blockTotalMs);
+            });
+
+            let qItem = selectable[0];
+            let qIndex = p.queue.findIndex(q => q.id === qItem.id);
+            let minTime = resolvedMap.get(qItem.id)!;
+
+            for (let i = 1; i < selectable.length; i++) {
+                const itemTime = resolvedMap.get(selectable[i].id)!;
+                if (itemTime < minTime) {
+                    minTime = itemTime;
+                    qItem = selectable[i];
+                    qIndex = p.queue.findIndex(q => q.id === qItem.id);
+                }
+            }
 
             if (qItem) {
                 let nextQ = [...p.queue];

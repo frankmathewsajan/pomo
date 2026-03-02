@@ -24,6 +24,20 @@ function ActivitySidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () =
         );
     }
 
+    const groupedFiltered = filtered.reduce((acc: (typeof history[0] & { count: number })[], current) => {
+        if (acc.length === 0) {
+            acc.push({ ...current, count: 1 });
+        } else {
+            const last = acc[acc.length - 1];
+            if (last.task === current.task && last.block === current.block && last.status === current.status) {
+                last.count += 1;
+            } else {
+                acc.push({ ...current, count: 1 });
+            }
+        }
+        return acc;
+    }, []);
+
     return (
         <div className="w-80 border-r flex flex-col h-full bg-card overflow-hidden shrink-0" style={{ background: "var(--card)", borderColor: "var(--border-ring)", transition: "background-color 0.3s ease, border-color 0.3s ease" }}>
             <div className="shrink-0 flex flex-col gap-4 border-b" style={{ padding: '1.25rem', borderColor: 'var(--border-ring)' }}>
@@ -44,10 +58,17 @@ function ActivitySidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () =
             </div>
 
             <div className="flex flex-col gap-3 overflow-y-auto flex-1" style={{ padding: '1.25rem' }}>
-                {filtered.map((h, i) => (
+                {groupedFiltered.map((h, i) => (
                     <div key={i} className="hist-item relative text-left flex flex-col items-start gap-1 p-4 rounded transition-colors hover:bg-black/5 shrink-0" style={{ border: '1px solid var(--border-ring)' }}>
                         <div className="flex justify-between w-full items-center">
-                            <span className="font-semibold text-sm truncate pr-2">{h.task || "Untitled"}</span>
+                            <div className="flex items-center gap-2 overflow-hidden pr-2">
+                                <span className="font-semibold text-sm truncate">{h.task || "Untitled"}</span>
+                                {h.count > 1 && (
+                                    <span className="text-[10px] font-bold opacity-60 bg-black/5 px-1.5 py-0.5 rounded-full shrink-0">
+                                        x{h.count}
+                                    </span>
+                                )}
+                            </div>
                             <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 ${h.status === "early" ? "bg-red-500/10 text-red-600" : "bg-green-500/10 text-green-600"}`}>
                                 {h.status}
                             </span>
@@ -55,7 +76,7 @@ function ActivitySidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () =
                         <span className="opacity-60 text-[10px] font-bold uppercase tracking-wider">{h.block} • {new Date(h.at).toLocaleDateString()} {new Date(h.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                 ))}
-                {filtered.length === 0 && <p className="text-[13px] opacity-50 text-center py-6">No history found.</p>}
+                {groupedFiltered.length === 0 && <p className="text-[13px] opacity-50 text-center py-6">No history found.</p>}
             </div>
         </div>
     );
@@ -182,7 +203,82 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                         return true;
                     });
 
-                    if (visibleQueue.length === 0 && !showArchived) {
+                    const getFixedTarget = (idleTime: string) => {
+                        if (idleTime.includes("T")) return new Date(idleTime);
+                        const target = new Date();
+                        const [h, m] = idleTime.split(":").map(Number);
+                        target.setHours(h, m, 0, 0);
+                        if (target.getTime() <= Date.now()) {
+                            target.setTime(target.getTime() + 86400000);
+                        }
+                        return target;
+                    };
+
+                    const realNow = new Date();
+                    const fixedBlocks = visibleQueue.filter(q => q.idleTime).map(q => {
+                        const target = getFixedTarget(q.idleTime!);
+                        const bcfg = durations[q.type as keyof typeof durations] || [25, 5];
+                        const end = new Date(target.getTime());
+                        end.setMinutes(end.getMinutes() + bcfg[0] + bcfg[1]);
+                        return { id: q.id, start: target.getTime(), end: end.getTime() };
+                    });
+
+                    const resolvedMap = new Map<string, { start: Date, end: Date, originalIndex: number }>();
+
+                    visibleQueue.forEach((q, idx) => {
+                        if (q.idleTime) {
+                            const target = getFixedTarget(q.idleTime);
+                            const end = new Date(target.getTime());
+                            end.setMinutes(end.getMinutes() + (durations[q.type as keyof typeof durations] || [25, 5])[0]);
+                            resolvedMap.set(q.id, { start: target, end, originalIndex: idx });
+                        }
+                    });
+
+                    let iterTime = new Date(currentTime.getTime());
+
+                    visibleQueue.forEach((q, idx) => {
+                        if (q.idleTime) return;
+
+                        if (iterTime.getTime() < realNow.getTime()) {
+                            iterTime = new Date(realNow);
+                        }
+
+                        const bcfg = durations[q.type as keyof typeof durations] || [25, 5];
+                        const blockDurMs = bcfg[0] * 60000;
+                        const blockTotalMs = (bcfg[0] + bcfg[1]) * 60000;
+
+                        let validStart = new Date(iterTime.getTime());
+                        let overlap = true;
+
+                        while (overlap && fixedBlocks.length > 0) {
+                            overlap = false;
+                            const tentativeEnd = new Date(validStart.getTime() + blockTotalMs);
+
+                            for (const fb of fixedBlocks) {
+                                if (tentativeEnd.getTime() > fb.start && validStart.getTime() < fb.end) {
+                                    validStart = new Date(fb.end);
+                                    overlap = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        const start = validStart;
+                        const end = new Date(start.getTime() + blockDurMs);
+                        resolvedMap.set(q.id, { start, end, originalIndex: idx });
+
+                        iterTime = new Date(start.getTime() + blockTotalMs);
+                    });
+
+                    const resolvedQueue = [...visibleQueue].sort((a, b) => {
+                        const resA = resolvedMap.get(a.id)!;
+                        const resB = resolvedMap.get(b.id)!;
+                        const diff = resA.start.getTime() - resB.start.getTime();
+                        if (diff !== 0) return diff;
+                        return resA.originalIndex - resB.originalIndex;
+                    });
+
+                    if (resolvedQueue.length === 0 && !showArchived) {
                         return <p className="text-[13px] opacity-50 text-center py-6">Your queue is empty.</p>;
                     }
 
@@ -197,54 +293,19 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                     <span className="text-[8px]">{showRecurring ? "▲" : "▼"}</span>
                                 </button>
                             )}
-                            {visibleQueue.map((q, i) => {
-                                // Real-time fix: Ensure future time calculation never drifts into the past
-                                const realNow = new Date();
-                                if (currentTime.getTime() < realNow.getTime()) {
-                                    currentTime = new Date(realNow);
-                                }
-
-                                let startInfoStr = "";
-                                let endInfoStr = "";
-
-                                if (q.idleTime) {
-                                    let target: Date;
-                                    if (q.idleTime.includes("T")) {
-                                        target = new Date(q.idleTime);
-                                    } else {
-                                        target = new Date(realNow);
-                                        const [h, m] = q.idleTime.split(":").map(Number);
-                                        target.setHours(h, m, 0, 0);
-                                        if (target.getTime() <= realNow.getTime()) {
-                                            target.setTime(target.getTime() + 86400000);
-                                        }
-                                    }
-
-                                    startInfoStr = target.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + " " + target.toLocaleDateString([], { month: 'short', day: 'numeric' });
-                                    const end = new Date(target.getTime());
-                                    end.setMinutes(end.getMinutes() + (durations[q.type as keyof typeof durations] || [25, 5])[0]);
-                                    endInfoStr = end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + " " + end.toLocaleDateString([], { month: 'short', day: 'numeric' });
-                                } else {
-                                    startInfoStr = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                    const bcfg = durations[q.type] || [25, 5];
-
-                                    const endInfo = new Date(currentTime.getTime());
-                                    endInfo.setMinutes(endInfo.getMinutes() + bcfg[0]);
-                                    endInfoStr = endInfo.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-                                    currentTime.setMinutes(currentTime.getMinutes() + bcfg[0] + bcfg[1]);
-                                }
+                            {resolvedQueue.map((q, i) => {
+                                const res = resolvedMap.get(q.id)!;
+                                const startInfoStr = res.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + (q.idleTime ? " " + res.start.toLocaleDateString([], { month: 'short', day: 'numeric' }) : "");
+                                const endInfoStr = res.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + (q.idleTime ? " " + res.end.toLocaleDateString([], { month: 'short', day: 'numeric' }) : "");
 
                                 const isScheduled = !!q.idleTime;
-                                const isOldTask = !isScheduled && !q.recurring && q.createdAt
-                                    ? (realNow.getTime() - q.createdAt) > 86400000
-                                    : false;
+                                const isOldTask = !isScheduled && !q.recurring && q.createdAt ? (realNow.getTime() - q.createdAt) > 86400000 : false;
 
                                 return (
                                     <div key={q.id} className="hist-item relative group text-left flex flex-col justify-between gap-3 p-4 rounded transition-colors hover:bg-black/5 shrink-0" style={{ border: `1px ${isScheduled ? 'double' : 'solid'} ${isOldTask ? 'rgba(239, 68, 68, 0.4)' : 'var(--border-ring)'}`, borderWidth: isScheduled ? '3px' : '1px' }}>
                                         <div className="absolute top-2 right-2 flex items-center bg-[var(--card)]/90 backdrop-blur-md rounded-md shadow-sm border border-[var(--border-ring)] opacity-0 group-hover:opacity-100 transition-opacity z-10 px-1 py-1">
-                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={i <= 0} onClick={() => swapInQueue(q.id, -1, visibleQueue)}>↑</button>
-                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={i >= visibleQueue.length - 1} onClick={() => swapInQueue(q.id, 1, visibleQueue)}>↓</button>
+                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={i <= 0} onClick={() => swapInQueue(q.id, -1, resolvedQueue)}>↑</button>
+                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={i >= resolvedQueue.length - 1} onClick={() => swapInQueue(q.id, 1, resolvedQueue)}>↓</button>
                                             {editingId !== q.id && <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title="Edit" onClick={() => startEditing(q)}>✎</button>}
                                             <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title={q.archived ? "Unarchive" : "Archive"} onClick={() => setQueue(queue.map(x => x.id === q.id ? { ...x, archived: !x.archived } : x))}>{q.archived ? "⇧" : "⇩"}</button>
                                             <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-red-500 hover:text-white" onClick={() => setQueue(queue.filter(x => x.id !== q.id))}>✕</button>
