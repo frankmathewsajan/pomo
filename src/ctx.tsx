@@ -15,7 +15,7 @@ type PendingNext = {
 type S = {
     theme: number;
     running: boolean;
-    mode: "w" | "b" | "idle";
+    mode: "w" | "b" | "idle" | "wait";
     block: Block | "idle";
     task: string;
     queue: QueuedBlock[];
@@ -26,6 +26,12 @@ type S = {
     pendingNext: PendingNext;
     lastQueuePopDate?: string;
     lastQueuePopIndex?: number;
+    waitStartMs?: number;
+    waitTargetMs?: number;
+    waitTask?: string;
+    waitNotes?: string;
+    advancedNotes?: boolean;
+    waitEnabled?: boolean;
 };
 
 const def: S = {
@@ -44,10 +50,19 @@ const loadH = (): Entry[] => { try { return JSON.parse(localStorage.getItem(HK)!
 type Ctx = S & {
     history: Entry[];
     timeLeftMs: number;
+    waitElapsedMs: number;
+    waitLeftMs: number;
+    advancedNotes: boolean;
+    toggleAdvancedNotes: () => void;
+    waitEnabled: boolean;
+    toggleWaitEnabled: () => void;
     toggle: () => void;
     reset: () => void;
     finish: () => void;
     continueSame: () => void;
+    startWait: (task: string, durationMs: number) => void;
+    resolveWait: () => void;
+    abandonWait: () => void;
     nextInQueue: () => void;
     cancelPending: () => void;
     next: () => void;
@@ -147,11 +162,73 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    const startWait = (task: string, durationMs: number) => {
+        const c = ref.current;
+        if (c.mode !== "w" || !c.running) return;
+        const left = c.targetMs ? Math.max(0, c.targetMs - Date.now()) : (c.pausedLeftMs || 0);
+        set({
+            ...c,
+            mode: "wait",
+            running: false,
+            targetMs: null,
+            pausedLeftMs: left,
+            waitStartMs: Date.now(),
+            waitTargetMs: Date.now() + durationMs,
+            waitTask: task,
+            waitNotes: ""
+        });
+    };
+
+    const resolveWait = () => {
+        const c = ref.current;
+        if (c.mode !== "wait") return;
+        setHistory(h => [{ task: c.waitTask || "Wait Micro-task", block: "mini" as Block, at: Date.now(), status: "micro-task" as const }, ...h].slice(0, 50));
+
+        set({
+            ...c,
+            mode: "w",
+            running: true,
+            targetMs: c.pausedLeftMs ? Date.now() + c.pausedLeftMs : null,
+            pausedLeftMs: null,
+            waitStartMs: undefined,
+            waitTargetMs: undefined,
+            waitTask: undefined,
+            waitNotes: undefined
+        });
+    };
+
+    const abandonWait = () => {
+        const c = ref.current;
+        if (c.mode !== "wait") return;
+
+        setHistory(h => [
+            { task: c.waitTask || "Wait Micro-task", block: "mini" as Block, at: Date.now(), status: "micro-task" as const },
+            { task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "abandoned" as const },
+            ...h
+        ].slice(0, 50));
+
+        set({
+            ...c,
+            mode: "w",
+            running: false,
+            targetMs: null,
+            task: "",
+            notes: "",
+            waitStartMs: undefined,
+            waitTargetMs: undefined,
+            waitTask: undefined,
+            waitNotes: undefined
+        });
+    };
+
     let timeLeftMs = s.running && s.targetMs ? Math.max(0, s.targetMs - now) : (s.pausedLeftMs || 0);
+    let waitElapsedMs = s.mode === "wait" && s.waitStartMs ? Math.max(0, now - s.waitStartMs) : 0;
+    let waitLeftMs = s.mode === "wait" && s.waitTargetMs ? Math.max(0, s.waitTargetMs - now) : 0;
 
     useEffect(() => {
         if (s.running && s.targetMs && now >= s.targetMs) completeBlock();
-    }, [now, s.running, s.targetMs]);
+        if (s.mode === "wait" && s.waitTargetMs && now >= s.waitTargetMs) abandonWait();
+    }, [now, s.running, s.targetMs, s.mode, s.waitTargetMs]);
 
     useEffect(() => {
         const r = document.documentElement;
@@ -161,8 +238,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, [s.theme]);
 
     const v: Ctx = {
-        ...s, history, timeLeftMs,
+        ...s, history, timeLeftMs, waitElapsedMs, waitLeftMs,
+        advancedNotes: !!s.advancedNotes,
+        toggleAdvancedNotes: () => set(p => ({ ...p, advancedNotes: !p.advancedNotes })),
+        waitEnabled: s.waitEnabled !== false,
+        toggleWaitEnabled: () => set(p => ({ ...p, waitEnabled: p.waitEnabled === false })),
         toggle: () => set(p => {
+            if (p.mode === "wait") return p; // toggle shouldn't affect wait
             if (p.running) {
                 return { ...p, running: false, targetMs: null, pausedLeftMs: timeLeftMs };
             } else {
@@ -181,6 +263,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setHistory(h => [{ task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "early" as const }, ...h].slice(0, 50));
             startBreak(c);
         },
+        startWait,
+        resolveWait,
+        abandonWait,
         continueSame: () => set(p => {
             if (p.mode === "b" && p.running) {
                 return {

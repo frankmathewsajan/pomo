@@ -14,7 +14,7 @@ export type QueuedBlock = {
     createdAt?: number;
 };
 
-export type HistoryStatus = "completed" | "early" | "aborted" | "scheduled";
+export type HistoryStatus = "completed" | "early" | "aborted" | "scheduled" | "abandoned" | "micro-task";
 
 export type Entry = {
     task: string;

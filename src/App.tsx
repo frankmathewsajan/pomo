@@ -4,10 +4,11 @@ import { AppProvider, useApp } from "./ctx";
 import Timer from "./Timer";
 import { T } from "./themes";
 import { BLOCK_NAMES, type Block } from "./types";
+import RichTextToolbar from "./RichTextToolbar";
 
 function ActivitySidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => void }) {
     const { history } = useApp();
-    const [filter, setFilter] = useState<"all" | "completed" | "early">("all");
+    const [filter, setFilter] = useState<"all" | "completed" | "early" | "abandoned">("all");
     const [dateFilter, setDateFilter] = useState("");
 
     const filtered = history.filter(h => {
@@ -45,10 +46,11 @@ function ActivitySidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () =
                     <h2 className="label !m-0" style={{ opacity: 0.9 }}>Activity & History</h2>
                     <button className="wb w-6 h-6 rounded hover:bg-black/10" onClick={onToggle}>◀</button>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                     <button className={`pill !px-3 !py-1 !text-xs ${filter === "all" ? "opacity-100 ring-2 ring-black/10" : "opacity-50"}`} onClick={() => setFilter("all")}>All</button>
                     <button className={`pill !px-3 !py-1 !text-xs ${filter === "completed" ? "opacity-100 ring-2 ring-black/10" : "opacity-50"}`} onClick={() => setFilter("completed")}>Done</button>
                     <button className={`pill !px-3 !py-1 !text-xs ${filter === "early" ? "opacity-100 ring-2 ring-black/10" : "opacity-50"}`} onClick={() => setFilter("early")}>Early</button>
+                    <button className={`pill !px-3 !py-1 !text-xs ${filter === "abandoned" ? "opacity-100 ring-2 ring-black/10" : "opacity-50"}`} onClick={() => setFilter("abandoned")}>Wait drops</button>
                 </div>
 
                 <div className="relative w-full flex items-center group">
@@ -59,17 +61,21 @@ function ActivitySidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () =
 
             <div className="flex flex-col gap-3 overflow-y-auto flex-1" style={{ padding: '1.25rem' }}>
                 {groupedFiltered.map((h, i) => (
-                    <div key={i} className="hist-item relative text-left flex flex-col items-start gap-1 p-4 rounded transition-colors hover:bg-black/5 shrink-0" style={{ border: '1px solid var(--border-ring)' }}>
+                    <div key={i} className={`hist-item relative text-left flex flex-col items-start gap-1 p-4 rounded transition-colors hover:bg-black/5 shrink-0 ${h.status === "abandoned" ? "opacity-50" : ""}`} style={{ border: '1px solid var(--border-ring)' }}>
                         <div className="flex justify-between w-full items-center">
                             <div className="flex items-center gap-2 overflow-hidden pr-2">
-                                <span className="font-semibold text-sm truncate">{h.task || "Untitled"}</span>
+                                <span className={`font-semibold text-sm truncate ${h.status === "abandoned" ? "line-through" : ""}`}>{h.task || "Untitled"}</span>
                                 {h.count > 1 && (
                                     <span className="text-[10px] font-bold opacity-60 bg-black/5 px-1.5 py-0.5 rounded-full shrink-0">
                                         x{h.count}
                                     </span>
                                 )}
                             </div>
-                            <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 ${h.status === "early" ? "bg-red-500/10 text-red-600" : "bg-green-500/10 text-green-600"}`}>
+                            <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 ${h.status === "early" ? "bg-red-500/10 text-red-600" :
+                                h.status === "abandoned" ? "bg-zinc-500/10 text-zinc-500" :
+                                    h.status === "micro-task" ? "bg-blue-500/10 text-blue-500" :
+                                        "bg-green-500/10 text-green-600"
+                                }`}>
                                 {h.status}
                             </span>
                         </div>
@@ -94,9 +100,11 @@ function Toggle({ on, onToggle, label }: { on: boolean; onToggle: () => void; la
 }
 
 function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => void }) {
-    const { queue, setQueue, timeLeftMs, mode, block, durations } = useApp();
+    const { queue, setQueue, timeLeftMs, mode, block, durations, advancedNotes } = useApp();
     const [qType, setQType] = useState<Block>("normal");
     const [qTask, setQTask] = useState("");
+    const qNotesRef = useRef<HTMLTextAreaElement>(null);
+    const editNotesRef = useRef<HTMLTextAreaElement>(null);
     const [isIdle, setIsIdle] = useState(false);
     const [isRecurring, setIsRecurring] = useState(false);
     const [showRecurring, setShowRecurring] = useState(false);
@@ -321,8 +329,14 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                                             onKeyDown={e => handleEditKeyDown(e, q.id)}
                                                             autoFocus
                                                         />
+                                                        {advancedNotes && (
+                                                            <div className="-ml-1">
+                                                                <RichTextToolbar textareaRef={editNotesRef} value={editNotesStr} onChange={setEditNotesStr} />
+                                                            </div>
+                                                        )}
                                                         <textarea
-                                                            className="task-input w-full text-xs font-normal !p-1 -ml-1 h-auto resize-none min-h-[60px]"
+                                                            ref={editNotesRef}
+                                                            className={`task-input w-full text-xs font-normal !p-1 -ml-1 h-auto resize-none min-h-[60px] ${advancedNotes ? 'bg-black/5 rounded-b-md rounded-t-none border-t-0' : 'bg-transparent'}`}
                                                             value={editNotesStr}
                                                             onChange={e => setEditNotesStr(e.target.value)}
                                                             onKeyDown={e => handleEditKeyDown(e, q.id)}
@@ -348,7 +362,7 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                                         </span>
                                                         {q.notes && (
                                                             <div
-                                                                className="text-xs opacity-70 mt-1.5 font-normal leading-relaxed overflow-hidden"
+                                                                className="text-xs opacity-70 mt-1.5 font-normal leading-relaxed overflow-hidden notes-content"
                                                                 dangerouslySetInnerHTML={{ __html: q.notes }}
                                                                 onClick={() => startEditing(q)}
                                                             />
@@ -389,7 +403,17 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                 <p className="text-xs font-bold uppercase tracking-wider opacity-60 m-0">Add block</p>
 
                 <input className="task-input w-full !text-left px-4 py-2 text-sm max-w-none border-none bg-white rounded-lg shadow-sm mb-3" placeholder="Task name..." value={qTask} onChange={e => setQTask(e.target.value)} />
-                <textarea className="task-input w-full !text-left px-4 py-2 text-xs max-w-none border-none bg-white rounded-lg shadow-sm mb-3 resize-none min-h-[50px]" placeholder="Notes (HTML supported)..." value={qNotes} onChange={e => setQNotes(e.target.value)} />
+
+                {advancedNotes && (
+                    <RichTextToolbar textareaRef={qNotesRef} value={qNotes} onChange={setQNotes} />
+                )}
+                <textarea
+                    ref={qNotesRef}
+                    className={`task-input w-full !text-left px-4 py-2 text-xs max-w-none bg-white shadow-sm mb-3 resize-none min-h-[50px] ${advancedNotes ? 'border-t-0 rounded-b-lg' : 'border-none rounded-lg'}`}
+                    placeholder="Notes (HTML supported)..."
+                    value={qNotes}
+                    onChange={e => setQNotes(e.target.value)}
+                />
 
                 <div className="flex gap-2 w-full">
                     {BLOCK_NAMES.map(b => (
@@ -533,7 +557,9 @@ function Chrome() {
     );
 }
 
+// Add toggleAdvancedNotes to App context sync menu 
 function SyncMenu() {
+    const { waitEnabled, toggleWaitEnabled, advancedNotes, toggleAdvancedNotes } = useApp();
     const [open, setOpen] = useState(false);
     const [exportNotice, setExportNotice] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -610,6 +636,14 @@ function SyncMenu() {
                         <button className="w-full text-left px-4 py-2.5 rounded hover:bg-black/5 transition-colors mt-1" onClick={handleImportClick}>
                             Import Config (JSON)
                         </button>
+                        <div className="px-4 py-2 border-t mt-1 border-black/5 flex justify-between items-center cursor-pointer hover:bg-black/5 transition-colors" onClick={toggleWaitEnabled}>
+                            <span>Wait function</span>
+                            <span className="font-bold opacity-70">{waitEnabled ? "ON" : "OFF"}</span>
+                        </div>
+                        <div className="px-4 py-2 flex justify-between items-center cursor-pointer hover:bg-black/5 transition-colors" onClick={toggleAdvancedNotes}>
+                            <span>Advanced Notes</span>
+                            <span className="font-bold opacity-70">{advancedNotes ? "ON" : "OFF"}</span>
+                        </div>
                     </div>
                 </div>
             )}
