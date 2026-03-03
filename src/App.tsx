@@ -192,14 +192,13 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
 
             <div className="flex flex-col gap-3 overflow-y-auto flex-1" style={{ padding: '1.25rem' }}>
                 {(() => {
-                    const hasNonRecurring = queue.some(q => !q.recurring && !q.archived);
                     const hasRecurring = queue.some(q => q.recurring && !q.archived);
-                    const canHide = hasNonRecurring && hasRecurring;
+                    const canHide = hasRecurring;
 
                     const visibleQueue = queue.filter(q => {
                         if (showArchived) return q.archived;
                         if (q.archived) return false;
-                        if (hasNonRecurring && !showRecurring && q.recurring) return false;
+                        if (!showRecurring && q.recurring) return false;
                         return true;
                     });
 

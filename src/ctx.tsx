@@ -24,6 +24,8 @@ type S = {
     pausedLeftMs: number | null; // Milliseconds remaining when paused
     notes: string;
     pendingNext: PendingNext;
+    lastQueuePopDate?: string;
+    lastQueuePopIndex?: number;
 };
 
 const def: S = {
@@ -73,6 +75,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const id = setInterval(() => setNow(Date.now()), 100);
         return () => clearInterval(id);
     }, []);
+
+    // Daily recurring task round robin
+    useEffect(() => {
+        const today = new Date(now).toLocaleDateString("en-CA"); // e.g., "YYYY-MM-DD"
+        if (s.lastQueuePopDate !== today) {
+            set(p => {
+                if (p.lastQueuePopDate === today) return p; // Prevent race
+
+                const recurringTasks = p.queue.filter(q => q.recurring && !q.archived);
+                if (recurringTasks.length > 0) {
+                    const nextIndex = ((p.lastQueuePopIndex ?? -1) + 1) % recurringTasks.length;
+                    const template = recurringTasks[nextIndex];
+
+                    const newTask: QueuedBlock = {
+                        ...template,
+                        id: Math.random().toString(36).substring(7),
+                        recurring: false,
+                        idleTime: undefined,
+                        createdAt: Date.now()
+                    };
+
+                    return { ...p, queue: [...p.queue, newTask], lastQueuePopDate: today, lastQueuePopIndex: nextIndex };
+                }
+
+                return { ...p, lastQueuePopDate: today };
+            });
+        }
+    }, [now, s.lastQueuePopDate]);
 
     const startBreak = (c: S) => {
         const b = (c.durations[c.block as Block] || [0, 0])[1];
@@ -167,9 +197,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return { ...p, mode: "w", running: true, targetMs: Date.now() + dur, pausedLeftMs: null, pendingNext: null };
         }),
         nextInQueue: () => set(p => {
-            const activeQueue = p.queue.filter(q => !q.archived);
-            const hasNormal = activeQueue.some(q => !q.recurring);
-            const selectable = p.queue.filter(q => !q.archived && (hasNormal ? !q.recurring : true));
+            const selectable = p.queue.filter(q => !q.archived && !q.recurring);
 
             if (selectable.length === 0) {
                 const [w] = p.durations[p.block as Block] || [10, 2];
@@ -246,10 +274,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
             if (qItem) {
                 let nextQ = [...p.queue];
                 nextQ.splice(qIndex, 1);
-                if (qItem.recurring) {
-                    nextQ.push({ ...qItem, id: Math.random().toString(36).substring(7), archived: false });
-                    nextQ = nextQ.map(q => ({ ...q, archived: false }));
-                }
 
                 // During break that's still running: queue the task to start after break ends
                 if (p.mode === "b" && p.running) {

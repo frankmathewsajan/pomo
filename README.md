@@ -29,8 +29,11 @@ Name your current task before starting. Completed or aborted focus sessions auto
 Plan your day using the **Up Next** queue sidebar:
 - **Add Blocks:** Quickly line up tasks as Mini, Normal, or Deep blocks.
 - **Schedule Time:** Set a specific time for a task to begin.
-- **Recurring Tasks:** Mark tasks as recurring. They stay hidden from your active list when regular tasks are pending, and execute as a fallback!
+- **Automated Recurring Tasks:** Create templates for recurring work. Every day, the system automatically pulls the next recurring task in a **round-robin** sequence and queues it up for you to complete, ensuring nothing sits ignored.
 - **Manage & Edit:** Re-order tasks with up/down arrows, rename tasks inline by clicking them, or delete them.
+
+### 🔔 Sound Alerts
+Distinct, unobtrusive sound chimes play at the **90% completion mark** and when your timer reaches **100%**, keeping you aware of your time blocks.
 
 ### 🗄️ JSON Config Syncing
 Easily Backup or Restore your active state and history across devices using the **Sync Menu** (bottom left). Export your config as a JSON file, or import an existing configuration file.
