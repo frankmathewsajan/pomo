@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 import { AppProvider, useApp } from "./ctx";
 import Timer from "./Timer";
+import Analytics from "./Analytics";
 import { T } from "./themes";
 import { BLOCK_NAMES, type Block, type RecurringOption } from "./types";
 import RichTextToolbar from "./RichTextToolbar";
@@ -99,8 +100,48 @@ function Toggle({ on, onToggle, label }: { on: boolean; onToggle: () => void; la
     );
 }
 
+function TagPicker({ tags, selected, onChange, onAdd }: { tags: string[], selected: string[], onChange: (s: string[]) => void, onAdd: (t: string) => void }) {
+    const [newTag, setNewTag] = useState("");
+
+    return (
+        <div className="flex flex-col gap-2 mt-2 bg-white/5 p-2 rounded-lg border border-black/5">
+            <span className="text-[10px] font-bold uppercase tracking-widest opacity-50">Tags</span>
+            <div className="flex flex-wrap gap-1">
+                {tags.map(t => (
+                    <button
+                        key={t}
+                        className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded transition-all ${selected.includes(t) ? "bg-[var(--accent)] text-white" : "bg-black/10 text-[var(--text)] opacity-60 hover:opacity-100"}`}
+                        onClick={() => {
+                            if (selected.includes(t)) onChange(selected.filter(x => x !== t));
+                            else onChange([...selected, t]);
+                        }}
+                    >
+                        {t}
+                    </button>
+                ))}
+            </div>
+            <div className="flex gap-1 mt-1">
+                <input
+                    className="task-input flex-1 !py-1 !px-2 text-[10px] uppercase font-bold bg-white focus:ring-1 focus:ring-black/10 rounded"
+                    placeholder="New Tag (Enter)..."
+                    value={newTag}
+                    onChange={e => setNewTag(e.target.value)}
+                    onKeyDown={e => {
+                        if (e.key === "Enter" && newTag.trim()) {
+                            e.preventDefault();
+                            onAdd(newTag.trim().toLowerCase());
+                            if (!selected.includes(newTag.trim().toLowerCase())) onChange([...selected, newTag.trim().toLowerCase()]);
+                            setNewTag("");
+                        }
+                    }}
+                />
+            </div>
+        </div>
+    );
+}
+
 function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => void }) {
-    const { queue, setQueue, timeLeftMs, mode, block, durations, advancedNotes, trash, restoreTask, removeTask, emptyTrash } = useApp();
+    const { queue, setQueue, timeLeftMs, mode, block, durations, advancedNotes, trash, restoreTask, removeTask, emptyTrash, globalTags, addGlobalTag } = useApp();
     const [qType, setQType] = useState<Block>("normal");
     const [qTask, setQTask] = useState("");
     const qNotesRef = useRef<HTMLTextAreaElement>(null);
@@ -118,9 +159,18 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
         return d.toISOString().slice(0, 16);
     });
     const [qNotes, setQNotes] = useState("");
+    const [qTags, setQTags] = useState<string[]>([]);
+
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editTaskStr, setEditTaskStr] = useState("");
     const [editNotesStr, setEditNotesStr] = useState("");
+    const [editType, setEditType] = useState<Block>("normal");
+    const [editIsIdle, setEditIsIdle] = useState(false);
+    const [editIdleTime, setEditIdleTime] = useState("");
+    const [editIsRecurring, setEditIsRecurring] = useState(false);
+    const [editRecOption, setEditRecOption] = useState<RecurringOption>("daily");
+    const [editRecDays, setEditRecDays] = useState<number[]>([]);
+    const [editTags, setEditTags] = useState<string[]>([]);
 
     const addQueue = () => {
         if (!qTask.trim()) return;
@@ -134,7 +184,8 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
             recurringOption: isRecurring ? recOption : undefined,
             recurringDays: isRecurring && recOption === "weekly" ? recDays : undefined,
             notes: qNotes.trim() || undefined,
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            tags: qTags.length > 0 ? qTags : undefined
         }]);
         setQTask("");
         setQNotes("");
@@ -142,6 +193,7 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
         setIsRecurring(false);
         setRecOption("daily");
         setRecDays([]);
+        setQTags([]);
     };
 
     const swapInQueue = (id: string, dir: -1 | 1, visible: typeof queue) => {
@@ -159,6 +211,13 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
         setEditingId(q.id);
         setEditTaskStr(q.task);
         setEditNotesStr(q.notes || "");
+        setEditType(q.type);
+        setEditIsIdle(!!q.idleTime);
+        setEditIdleTime(q.idleTime || qTime);
+        setEditIsRecurring(!!q.recurring);
+        setEditRecOption(q.recurringOption || "daily");
+        setEditRecDays(q.recurringDays || []);
+        setEditTags(q.tags || []);
     };
 
     const saveEdit = (id: string) => {
@@ -166,7 +225,18 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
             setEditingId(null);
             return;
         }
-        setQueue(queue.map(q => q.id === id ? { ...q, task: editTaskStr, notes: editNotesStr.trim() || undefined } : q));
+        setQueue(queue.map(q => q.id === id ? {
+            ...q,
+            task: editTaskStr,
+            notes: editNotesStr.trim() || undefined,
+            type: editType,
+            idleTime: editIsIdle ? editIdleTime : undefined,
+            isIdle: editIsIdle,
+            recurring: editIsRecurring,
+            recurringOption: editIsRecurring ? editRecOption : undefined,
+            recurringDays: editIsRecurring && editRecOption === "weekly" ? editRecDays : undefined,
+            tags: editTags.length > 0 ? editTags : undefined
+        } : q));
         setEditingId(null);
     };
 
@@ -328,7 +398,20 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                     });
 
                     if (resolvedQueue.length === 0 && !showArchived) {
-                        return <p className="text-[13px] opacity-50 text-center py-6">Your queue is empty.</p>;
+                        return (
+                            <div className="flex flex-col">
+                                {canHide && (
+                                    <button
+                                        className="text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity flex items-center justify-center gap-2 mb-1 w-full"
+                                        onClick={() => setShowRecurring(!showRecurring)}
+                                    >
+                                        {showRecurring ? "Hide Recurring" : "Show Recurring"}
+                                        <span className="text-[8px]">{showRecurring ? "▲" : "▼"}</span>
+                                    </button>
+                                )}
+                                <p className="text-[13px] opacity-50 text-center py-6">Your queue is empty.</p>
+                            </div>
+                        );
                     }
 
                     return (
@@ -384,7 +467,62 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                                             onKeyDown={e => handleEditKeyDown(e, q.id)}
                                                             placeholder="Notes (HTML supported)..."
                                                         />
-                                                        <div className="flex gap-2 justify-start mt-1 mb-2">
+
+                                                        {/* EDIT TYPE */}
+                                                        <div className="flex gap-1 w-full -ml-1 mt-1">
+                                                            {BLOCK_NAMES.map(b => (
+                                                                <button
+                                                                    key={b}
+                                                                    className="pill flex-1 !px-1 !py-1"
+                                                                    style={{
+                                                                        backgroundColor: editType === b ? 'var(--accent)' : 'transparent',
+                                                                        color: editType === b ? '#ffffff' : 'var(--text)',
+                                                                        border: '1px solid var(--border-ring)',
+                                                                        opacity: editType === b ? 1 : 0.6,
+                                                                        fontSize: '0.65rem',
+                                                                        fontWeight: 'bold',
+                                                                        textTransform: 'capitalize'
+                                                                    }}
+                                                                    onClick={() => setEditType(b)}
+                                                                >{b}</button>
+                                                            ))}
+                                                        </div>
+
+                                                        {/* EDIT TAGS */}
+                                                        <div className="-ml-1">
+                                                            <TagPicker tags={globalTags} selected={editTags} onChange={setEditTags} onAdd={addGlobalTag} />
+                                                        </div>
+
+                                                        {/* EDIT SCHEDULE & RECURRING */}
+                                                        <div className="flex items-center gap-3 mt-1 -ml-1">
+                                                            <Toggle on={editIsRecurring} onToggle={() => setEditIsRecurring(!editIsRecurring)} label="Recurring" />
+                                                            <Toggle on={editIsIdle} onToggle={() => setEditIsIdle(!editIsIdle)} label="Schedule" />
+                                                        </div>
+
+                                                        {editIsRecurring && (
+                                                            <div className="flex flex-col gap-1 -ml-1 mt-1">
+                                                                <select className="task-input text-[10px] font-bold w-full !py-1 bg-white focus:ring-0 cursor-pointer" value={editRecOption} onChange={e => setEditRecOption(e.target.value as RecurringOption)}>
+                                                                    <option value="daily">Everyday</option>
+                                                                    <option value="alternate">Alternate Days</option>
+                                                                    <option value="weekdays">Weekdays (Tue-Sat)</option>
+                                                                    <option value="holidays">Holidays (Sun-Mon)</option>
+                                                                    <option value="weekly">Specific Days</option>
+                                                                </select>
+                                                                {editRecOption === "weekly" && (
+                                                                    <div className="flex gap-1 justify-between px-1 mt-1">
+                                                                        {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day, dIdx) => (
+                                                                            <button key={day} className={`w-5 h-5 rounded-full text-[8px] font-bold flex items-center justify-center transition-colors ${editRecDays.includes(dIdx) ? "bg-[var(--accent)] text-white" : "bg-black/10 opacity-50 hover:opacity-100 text-[var(--text)]"}`} onClick={() => setEditRecDays(prev => prev.includes(dIdx) ? prev.filter(d => d !== dIdx) : [...prev, dIdx].sort())}>{day}</button>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+
+                                                        {editIsIdle && (
+                                                            <input type="datetime-local" className="task-input w-full -ml-1 px-2 py-1 h-8 text-xs bg-white rounded-lg mt-1 border-none shadow-sm" value={editIdleTime} onChange={e => setEditIdleTime(e.target.value)} />
+                                                        )}
+
+                                                        <div className="flex gap-2 justify-start mt-2 mb-2 -ml-1">
                                                             <button className="btn highlight !py-1 !px-3 !text-[11px] rounded" onClick={() => saveEdit(q.id)}>Save</button>
                                                             <button className="btn secondary !py-1 !px-3 !text-[11px] rounded" onClick={() => setEditingId(null)}>Cancel</button>
                                                         </div>
@@ -402,6 +540,13 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                                                 </span>
                                                             )}
                                                         </span>
+                                                        {q.tags && q.tags.length > 0 && (
+                                                            <div className="flex flex-wrap gap-1 mt-0.5">
+                                                                {q.tags.map(t => (
+                                                                    <span key={t} className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border border-black/10 transition-colors cursor-pointer" style={{ backgroundColor: 'var(--accent)', color: 'white', opacity: 0.8 }} onClick={() => startEditing(q)}>{t}</span>
+                                                                ))}
+                                                            </div>
+                                                        )}
                                                         {q.notes && (
                                                             <div
                                                                 className="text-xs opacity-70 mt-1.5 font-normal leading-relaxed overflow-hidden notes-content"
@@ -486,10 +631,12 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                     ))}
                 </div>
 
-                <div className="flex items-center gap-4 mt-1">
+                <div className="flex items-center gap-4 mt-2">
                     <Toggle on={isRecurring} onToggle={() => setIsRecurring(!isRecurring)} label="Recurring" />
                     <Toggle on={isIdle} onToggle={() => setIsIdle(!isIdle)} label="Schedule" />
                 </div>
+
+                <TagPicker tags={globalTags} selected={qTags} onChange={setQTags} onAdd={addGlobalTag} />
 
                 {isRecurring && (
                     <div className="flex flex-col gap-2 mt-2 bg-white/5 p-2 rounded-lg border border-black/5">
@@ -536,6 +683,7 @@ function Chrome() {
     const { theme, next } = useApp();
     const [leftOpen, setLeftOpen] = useState(false);
     const [rightOpen, setRightOpen] = useState(false);
+    const [showAnalytics, setShowAnalytics] = useState(false);
 
     const toggleLeft = () => {
         if (!leftOpen && rightOpen && window.innerWidth < 1100) {
@@ -614,10 +762,20 @@ function Chrome() {
                 <ActivitySidebar isOpen={leftOpen} onToggle={toggleLeft} />
                 <main className="flex-1 min-w-[500px] flex flex-col items-center justify-center p-6 sm:p-12 overflow-y-auto relative">
 
-                    <Timer />
+                    {showAnalytics ? <Analytics onBack={() => setShowAnalytics(false)} /> : <Timer />}
 
                     {/* Bottom Left Controls */}
                     <div className="absolute bottom-6 left-6 sm:bottom-8 sm:left-8 z-50 flex flex-col items-center gap-4">
+                        <button
+                            className="w-10 h-10 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-all shadow-sm cursor-pointer hover:scale-105"
+                            onClick={() => setShowAnalytics(!showAnalytics)}
+                            title="Analytics Dashboard"
+                        >
+                            <svg className={`w-5 h-5 transition-colors ${showAnalytics ? 'text-[var(--accent)]' : 'opacity-85'}`} fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" />
+                            </svg>
+                        </button>
+
                         <button
                             className="w-10 h-10 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-all shadow-sm cursor-pointer hover:scale-105"
                             onClick={next}

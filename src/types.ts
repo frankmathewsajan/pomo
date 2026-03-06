@@ -8,15 +8,16 @@ export type QueuedBlock = {
     id: string;
     type: Block;
     task: string;
-    isIdle?: boolean;
-    idleTime?: string; // e.g. "2026-03-01T16:00"
     recurring?: boolean;
     recurringOption?: RecurringOption;
-    recurringDays?: number[]; // 0=Sun, 1=Mon, ..., 6=Sat
-    lastGeneratedDate?: string; // e.g "YYYY-MM-DD"
+    recurringDays?: number[]; // 0=Sun, 6=Sat
+    lastGeneratedDate?: string;
+    idleTime?: string;
+    isIdle?: boolean;
     archived?: boolean;
     notes?: string;
     createdAt?: number;
+    tags?: string[];
 };
 
 export type HistoryStatus = "completed" | "early" | "aborted" | "scheduled" | "abandoned" | "micro-task";
@@ -27,4 +28,5 @@ export type Entry = {
     at: number;
     status: HistoryStatus;
     notes?: string;
+    tags?: string[];
 };

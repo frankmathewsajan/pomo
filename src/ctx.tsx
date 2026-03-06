@@ -10,6 +10,7 @@ type PendingNext = {
     task: string;
     notes: string;
     idleTime?: string;
+    tags?: string[];
 } | null;
 
 type S = {
@@ -33,17 +34,19 @@ type S = {
     advancedNotes?: boolean;
     waitEnabled?: boolean;
     trash: QueuedBlock[];
+    globalTags: string[];
+    currentTags?: string[];
 };
 
 const def: S = {
     theme: 0, running: false, mode: "w", block: "normal", task: "", queue: [],
     durations: DEF_BLOCKS, targetMs: null, pausedLeftMs: DEF_BLOCKS.normal[0] * 60000, notes: "",
-    pendingNext: null, trash: []
+    pendingNext: null, trash: [], globalTags: [], currentTags: []
 };
 const load = (): S => {
     try {
         const stored = JSON.parse(localStorage.getItem(K)!);
-        return { ...def, ...stored, queue: stored.queue || [], durations: stored.durations || DEF_BLOCKS, trash: stored.trash || [] };
+        return { ...def, ...stored, queue: stored.queue || [], durations: stored.durations || DEF_BLOCKS, trash: stored.trash || [], globalTags: stored.globalTags || [], currentTags: stored.currentTags || [] };
     } catch { return def; }
 };
 const loadH = (): Entry[] => { try { return JSON.parse(localStorage.getItem(HK)!) || []; } catch { return []; } };
@@ -75,6 +78,9 @@ type Ctx = S & {
     restoreTask: (id: string) => void;
     emptyTrash: () => void;
     setDuration: (b: Block, w: number, br: number) => void;
+    addGlobalTag: (tag: string) => void;
+    removeGlobalTag: (tag: string) => void;
+    setCurrentTags: (tags: string[]) => void;
 };
 const C = createContext<Ctx>(null!);
 export const useApp = () => useContext(C);
@@ -186,17 +192,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 target = new Date(ct.getFullYear(), ct.getMonth(), ct.getDate(), h, m).getTime();
                 if (target <= ct.getTime()) target += 86400000;
             }
-            set({ ...c, mode: "idle", block: p.type, task: p.task, notes: p.notes, running: true, targetMs: target, pausedLeftMs: null, pendingNext: null });
+            set({ ...c, mode: "idle", block: p.type, task: p.task, notes: p.notes, currentTags: p.tags, running: true, targetMs: target, pausedLeftMs: null, pendingNext: null });
         } else {
             const dur = (c.durations[p.type] || [25, 5])[0] * 60000;
-            set({ ...c, mode: "w", block: p.type, task: p.task, notes: p.notes, running: true, targetMs: Date.now() + dur, pausedLeftMs: null, pendingNext: null });
+            set({ ...c, mode: "w", block: p.type, task: p.task, notes: p.notes, currentTags: p.tags, running: true, targetMs: Date.now() + dur, pausedLeftMs: null, pendingNext: null });
         }
     };
 
     const completeBlock = () => {
         const c = ref.current;
         if (c.mode === "w") {
-            setHistory(h => [{ task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "completed" as const }, ...h].slice(0, 50));
+            setHistory(h => [{ task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "completed" as const, tags: c.currentTags }, ...h].slice(0, 50));
             startBreak(c);
         } else if (c.mode === "b") {
             if (c.pendingNext) {
@@ -251,7 +257,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         setHistory(h => [
             { task: c.waitTask || "Wait Micro-task", block: "mini" as Block, at: Date.now(), status: "micro-task" as const },
-            { task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "abandoned" as const },
+            { task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "abandoned" as const, tags: c.currentTags },
             ...h
         ].slice(0, 50));
 
@@ -308,7 +314,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         finish: () => {
             const c = ref.current;
             if (c.mode !== "w") return;
-            setHistory(h => [{ task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "early" as const }, ...h].slice(0, 50));
+            setHistory(h => [{ task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "early" as const, tags: c.currentTags }, ...h].slice(0, 50));
             startBreak(c);
         },
         startWait,
@@ -322,7 +328,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
                         type: p.block as Block,
                         task: p.task,
                         notes: p.notes,
-                        idleTime: undefined
+                        idleTime: undefined,
+                        tags: p.currentTags
                     }
                 };
             }
@@ -334,7 +341,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
             if (selectable.length === 0) {
                 const [w] = p.durations[p.block as Block] || [10, 2];
-                return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "", notes: "", pendingNext: null };
+                return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "", notes: "", currentTags: [], pendingNext: null };
             }
 
             const getFixedTarget = (idleTime: string) => {
@@ -417,7 +424,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
                             type: qItem.type as Block,
                             task: qItem.task,
                             notes: qItem.notes || "",
-                            idleTime: qItem.idleTime
+                            idleTime: qItem.idleTime,
+                            tags: qItem.tags
                         }
                     };
                 }
@@ -433,14 +441,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
                         target = new Date(ct.getFullYear(), ct.getMonth(), ct.getDate(), h, m).getTime();
                         if (target <= ct.getTime()) target += 86400000;
                     }
-                    return { ...p, mode: "idle", block: qItem.type as Block, task: qItem.task, notes: qItem.notes || "", queue: nextQ, running: true, targetMs: target, pausedLeftMs: null, pendingNext: null };
+                    return { ...p, mode: "idle", block: qItem.type as Block, task: qItem.task, notes: qItem.notes || "", currentTags: qItem.tags || [], queue: nextQ, running: true, targetMs: target, pausedLeftMs: null, pendingNext: null };
                 } else {
                     const dur = (p.durations[qItem.type as Block] || [25, 5])[0] * 60000;
-                    return { ...p, mode: "w", block: qItem.type as Block, task: qItem.task, notes: qItem.notes || "", queue: nextQ, running: true, targetMs: Date.now() + dur, pausedLeftMs: null, pendingNext: null };
+                    return { ...p, mode: "w", block: qItem.type as Block, task: qItem.task, notes: qItem.notes || "", currentTags: qItem.tags || [], queue: nextQ, running: true, targetMs: Date.now() + dur, pausedLeftMs: null, pendingNext: null };
                 }
             } else {
                 const [w] = p.durations[p.block as Block] || [10, 2];
-                return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "", notes: "", pendingNext: null };
+                return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "", notes: "", currentTags: [], pendingNext: null };
             }
         }),
         cancelPending: () => set(p => {
@@ -451,6 +459,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 task: p.pendingNext.task,
                 notes: p.pendingNext.notes,
                 idleTime: p.pendingNext.idleTime,
+                tags: p.pendingNext.tags,
             };
             return { ...p, pendingNext: null, queue: [restored, ...p.queue] };
         }),
@@ -471,7 +480,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return { ...p, trash: p.trash.filter(t => t.id !== id), queue: [...p.queue, taskToRestore] };
         }),
         emptyTrash: () => set(p => ({ ...p, trash: [] })),
-        setDuration: (b, w, br) => set(p => ({ ...p, durations: { ...p.durations, [b]: [w, br] } }))
+        setDuration: (b, w, br) => set(p => ({ ...p, durations: { ...p.durations, [b]: [w, br] } })),
+        addGlobalTag: (t) => set(p => p.globalTags.includes(t) ? p : { ...p, globalTags: [...p.globalTags, t] }),
+        removeGlobalTag: (t) => set(p => ({ ...p, globalTags: p.globalTags.filter(x => x !== t) })),
+        setCurrentTags: (tags) => set(p => ({ ...p, currentTags: tags }))
     };
 
     return <C.Provider value={v}>{children}</C.Provider>;
