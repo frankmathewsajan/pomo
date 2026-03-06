@@ -132,11 +132,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 }
 
                 if (shouldGenerate) {
+                    let newIdleTime = undefined;
+                    if (t.idleTime) {
+                        if (t.idleTime.includes("T")) {
+                            const timePart = t.idleTime.split("T")[1];
+                            newIdleTime = `${todayStr}T${timePart}`;
+                        } else {
+                            newIdleTime = `${todayStr}T${t.idleTime}`;
+                        }
+                    }
+
                     const newTask: QueuedBlock = {
                         ...t,
                         id: Math.random().toString(36).substring(7),
                         recurring: false,
-                        idleTime: undefined,
+                        idleTime: newIdleTime,
                         createdAt: Date.now()
                     };
                     nextQ.push(newTask);

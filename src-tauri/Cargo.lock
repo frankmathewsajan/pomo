@@ -2636,7 +2636,7 @@ dependencies = [
 
 [[package]]
 name = "pomo"
-version = "0.8.0"
+version = "0.9.1"
 dependencies = [
  "serde",
  "serde_json",

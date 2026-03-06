@@ -100,7 +100,7 @@ function Toggle({ on, onToggle, label }: { on: boolean; onToggle: () => void; la
 }
 
 function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => void }) {
-    const { queue, setQueue, timeLeftMs, mode, block, durations, advancedNotes } = useApp();
+    const { queue, setQueue, timeLeftMs, mode, block, durations, advancedNotes, trash, restoreTask, removeTask, emptyTrash } = useApp();
     const [qType, setQType] = useState<Block>("normal");
     const [qTask, setQTask] = useState("");
     const qNotesRef = useRef<HTMLTextAreaElement>(null);
@@ -208,8 +208,6 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
             <div className="flex flex-col gap-3 overflow-y-auto flex-1" style={{ padding: '1.25rem' }}>
                 {(() => {
                     if (showTrash) {
-                        const { trash, restoreTask, removeTask, emptyTrash } = useApp();
-
                         if (trash.length === 0) {
                             return (
                                 <div className="flex flex-col items-center justify-center h-full gap-4">
@@ -359,7 +357,7 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                             <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={i >= resolvedQueue.length - 1} onClick={() => swapInQueue(q.id, 1, resolvedQueue)}>↓</button>
                                             {editingId !== q.id && <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title="Edit" onClick={() => startEditing(q)}>✎</button>}
                                             <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title={q.archived ? "Unarchive" : "Archive"} onClick={() => setQueue(queue.map(x => x.id === q.id ? { ...x, archived: !x.archived } : x))}>{q.archived ? "⇧" : "⇩"}</button>
-                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-red-500 hover:text-white" onClick={() => { const { removeTask } = useApp(); removeTask(q.id); }}>✕</button>
+                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-red-500 hover:text-white" onClick={() => removeTask(q.id)}>✕</button>
                                         </div>
 
                                         <div className="flex justify-between w-full items-start gap-4 pr-1">
@@ -442,7 +440,7 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                     onClick={() => setShowTrash(true)}
                                     title="View Deleted Tasks"
                                 >
-                                    Trash ({useApp().trash.length})
+                                    Trash ({trash.length})
                                 </button>
                             </div>
                         </>
