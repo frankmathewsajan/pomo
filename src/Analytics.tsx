@@ -7,16 +7,16 @@ export default function Analytics({ onBack }: { onBack: () => void }) {
     const [view, setView] = useState<"day" | "week" | "month" | "year">("day");
 
     const stats = useMemo(() => {
-        const now = new Date();
-        now.setHours(0, 0, 0, 0); // start of day
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const now = Date.now();
 
         const filtered = history.filter(h => {
-            const d = new Date(h.at);
-            const diff = now.getTime() - d.getTime();
-            if (view === "day") return diff <= 86400000;
-            if (view === "week") return diff <= 86400000 * 7;
-            if (view === "month") return diff <= 86400000 * 30;
-            if (view === "year") return diff <= 86400000 * 365;
+            const d = new Date(h.at).getTime();
+            if (view === "day") return d >= startOfDay.getTime();
+            if (view === "week") return d >= now - 86400000 * 7;
+            if (view === "month") return d >= now - 86400000 * 30;
+            if (view === "year") return d >= now - 86400000 * 365;
             return false;
         });
 
@@ -44,7 +44,12 @@ export default function Analytics({ onBack }: { onBack: () => void }) {
         });
 
         const totalPomoMs = pomoMs + pomoEarlyMs;
-        const periodMs = view === "day" ? 86400000 : view === "week" ? 86400000 * 7 : view === "month" ? 86400000 * 30 : 86400000 * 365;
+        let periodMs = 0;
+        if (view === "day") periodMs = now - startOfDay.getTime();
+        else if (view === "week") periodMs = 86400000 * 7;
+        else if (view === "month") periodMs = 86400000 * 30;
+        else periodMs = 86400000 * 365;
+
         const idleMs = Math.max(0, periodMs - totalPomoMs);
 
         const pieData = [
@@ -86,26 +91,28 @@ export default function Analytics({ onBack }: { onBack: () => void }) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-full overflow-hidden">
-                <div className="flex flex-col gap-4 bg-[var(--card)] p-6 rounded-2xl shadow-sm border border-[var(--border-ring)] pb-8">
+                <div className="flex flex-col gap-4 bg-[var(--card)] p-6 rounded-2xl shadow-sm border border-[var(--border-ring)] pb-8 overflow-hidden" style={{ minHeight: '320px' }}>
                     <h2 className="text-sm font-bold uppercase tracking-widest opacity-60">Time Distribution</h2>
-                    <div className="h-48 mt-4 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={stats.pieData}
-                                    cx="50%" cy="50%"
-                                    innerRadius={50} outerRadius={70}
-                                    paddingAngle={3}
-                                    dataKey="value"
-                                    stroke="none"
-                                >
-                                    {stats.pieData.map((e, index) => <Cell key={index} fill={e.fill} />)}
-                                </Pie>
-                                <Tooltip formatter={(val: any) => formatMs(val)} contentStyle={{ borderRadius: '8px', border: '1px solid var(--border-ring)', background: 'var(--card)', color: 'var(--text)' }} />
-                            </PieChart>
-                        </ResponsiveContainer>
+                    <div className="flex-1 w-full" style={{ height: '240px', minHeight: '240px', position: 'relative' }}>
+                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={stats.pieData}
+                                        cx="50%" cy="50%"
+                                        innerRadius={60} outerRadius={80}
+                                        paddingAngle={3}
+                                        dataKey="value"
+                                        stroke="none"
+                                    >
+                                        {stats.pieData.map((e, index) => <Cell key={index} fill={e.fill} />)}
+                                    </Pie>
+                                    <Tooltip formatter={(val: any) => formatMs(val)} contentStyle={{ borderRadius: '8px', border: '1px solid var(--border-ring)', background: 'var(--card)', color: 'var(--text)' }} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
-                    <div className="flex justify-center gap-8 mt-4">
+                    <div className="flex justify-center gap-8 mt-4 shrink-0">
                         <div className="flex flex-col items-center">
                             <span className="text-[10px] font-bold uppercase tracking-wider opacity-50 mb-1">Focused</span>
                             <span className="font-bold text-lg" style={{ color: 'var(--accent)' }}>{formatMs(stats.totalPomoMs)}</span>
@@ -117,25 +124,27 @@ export default function Analytics({ onBack }: { onBack: () => void }) {
                     </div>
                 </div>
 
-                <div className="flex flex-col gap-4 bg-[var(--card)] p-6 rounded-2xl shadow-sm border border-[var(--border-ring)] p-8">
+                <div className="flex flex-col gap-4 bg-[var(--card)] p-6 rounded-2xl shadow-sm border border-[var(--border-ring)] pb-8 overflow-hidden" style={{ minHeight: '320px' }}>
                     <h2 className="text-sm font-bold uppercase tracking-widest opacity-60">Tags Breakdown</h2>
-                    <div className="h-64 mt-4 w-full">
+                    <div className="flex-1 w-full" style={{ height: '240px', minHeight: '240px', position: 'relative' }}>
                         {stats.tagData.length === 0 ? (
-                            <div className="w-full h-full flex flex-col items-center gap-2 justify-center opacity-40 text-sm font-bold">
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-2 opacity-40 text-sm font-bold py-10">
                                 <span>No Tag Data Found</span>
                                 <span className="text-[10px] font-normal opacity-70">Complete tasks with tags to see statistics here</span>
                             </div>
                         ) : (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={stats.tagData} layout="vertical" margin={{ left: -10, right: 10, top: 0, bottom: 0 }}>
-                                    <XAxis type="number" hide />
-                                    <YAxis dataKey="name" type="category" width={80} axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold', fill: 'var(--text)', opacity: 0.8 }} />
-                                    <Tooltip cursor={{ fill: 'rgba(0,0,0,0.05)' }} formatter={(val: any) => [val.toFixed(1) + 'h', "Duration"]} contentStyle={{ borderRadius: '8px', border: '1px solid var(--border-ring)', background: 'var(--card)', color: 'var(--text)' }} />
-                                    <Bar dataKey="hours" fill="var(--accent)" radius={[0, 4, 4, 0]} barSize={20}>
-                                        {stats.tagData.map((e, index) => <Cell key={index} fill="var(--accent)" fillOpacity={0.8 + (index * 0.05)} />)}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
+                            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={stats.tagData} layout="vertical" margin={{ left: -10, right: 10, top: 0, bottom: 0 }}>
+                                        <XAxis type="number" hide />
+                                        <YAxis dataKey="name" type="category" width={80} axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold', fill: 'var(--text)', opacity: 0.8 }} />
+                                        <Tooltip cursor={{ fill: 'rgba(0,0,0,0.05)' }} formatter={(val: any) => [Number(val).toFixed(1) + 'h', "Duration"]} contentStyle={{ borderRadius: '8px', border: '1px solid var(--border-ring)', background: 'var(--card)', color: 'var(--text)' }} />
+                                        <Bar dataKey="hours" fill="var(--accent)" radius={[0, 4, 4, 0]} barSize={20}>
+                                            {stats.tagData.map((e, index) => <Cell key={index} fill="var(--accent)" fillOpacity={0.8 + (index * 0.05)} />)}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
                         )}
                     </div>
                 </div>
