@@ -32,17 +32,18 @@ type S = {
     waitNotes?: string;
     advancedNotes?: boolean;
     waitEnabled?: boolean;
+    trash: QueuedBlock[];
 };
 
 const def: S = {
     theme: 0, running: false, mode: "w", block: "normal", task: "", queue: [],
     durations: DEF_BLOCKS, targetMs: null, pausedLeftMs: DEF_BLOCKS.normal[0] * 60000, notes: "",
-    pendingNext: null
+    pendingNext: null, trash: []
 };
 const load = (): S => {
     try {
         const stored = JSON.parse(localStorage.getItem(K)!);
-        return { ...def, ...stored, queue: stored.queue || [], durations: stored.durations || DEF_BLOCKS };
+        return { ...def, ...stored, queue: stored.queue || [], durations: stored.durations || DEF_BLOCKS, trash: stored.trash || [] };
     } catch { return def; }
 };
 const loadH = (): Entry[] => { try { return JSON.parse(localStorage.getItem(HK)!) || []; } catch { return []; } };
@@ -70,6 +71,9 @@ type Ctx = S & {
     setTask: (t: string) => void;
     setNotes: (n: string) => void;
     setQueue: (q: QueuedBlock[]) => void;
+    removeTask: (id: string) => void;
+    restoreTask: (id: string) => void;
+    emptyTrash: () => void;
     setDuration: (b: Block, w: number, br: number) => void;
 };
 const C = createContext<Ctx>(null!);
@@ -93,31 +97,65 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Daily recurring task round robin
     useEffect(() => {
-        const today = new Date(now).toLocaleDateString("en-CA"); // e.g., "YYYY-MM-DD"
-        if (s.lastQueuePopDate !== today) {
-            set(p => {
-                if (p.lastQueuePopDate === today) return p; // Prevent race
+        const today = new Date(now);
+        const todayStr = today.toLocaleDateString("en-CA"); // e.g., "YYYY-MM-DD"
 
-                const recurringTasks = p.queue.filter(q => q.recurring && !q.archived);
-                if (recurringTasks.length > 0) {
-                    const nextIndex = ((p.lastQueuePopIndex ?? -1) + 1) % recurringTasks.length;
-                    const template = recurringTasks[nextIndex];
+        set(p => {
+            let changed = false;
+            let nextQ = [...p.queue];
+            const activeTemplates = nextQ.filter(q => q.recurring && !q.archived);
 
+            for (const t of activeTemplates) {
+                if (t.lastGeneratedDate === todayStr) continue;
+
+                let shouldGenerate = false;
+                const opt = t.recurringOption || "daily";
+                const day = today.getDay(); // 0=Sun, ..., 6=Sat
+
+                if (opt === "daily") {
+                    shouldGenerate = true;
+                } else if (opt === "alternate") {
+                    if (!t.lastGeneratedDate) {
+                        shouldGenerate = true;
+                    } else {
+                        const lastDate = new Date(t.lastGeneratedDate);
+                        const diffTime = Math.abs(today.getTime() - lastDate.getTime());
+                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                        if (diffDays >= 2) shouldGenerate = true;
+                    }
+                } else if (opt === "weekdays") {
+                    if (day >= 2 && day <= 6) shouldGenerate = true; // Tue to Sat
+                } else if (opt === "holidays") {
+                    if (day === 0 || day === 1) shouldGenerate = true; // Sun and Mon
+                } else if (opt === "weekly") {
+                    if (t.recurringDays && t.recurringDays.includes(day)) shouldGenerate = true;
+                }
+
+                if (shouldGenerate) {
                     const newTask: QueuedBlock = {
-                        ...template,
+                        ...t,
                         id: Math.random().toString(36).substring(7),
                         recurring: false,
                         idleTime: undefined,
                         createdAt: Date.now()
                     };
+                    nextQ.push(newTask);
 
-                    return { ...p, queue: [...p.queue, newTask], lastQueuePopDate: today, lastQueuePopIndex: nextIndex };
+                    // update lastGeneratedDate on the template
+                    const templateIndex = nextQ.findIndex(q => q.id === t.id);
+                    if (templateIndex !== -1) {
+                        nextQ[templateIndex] = { ...nextQ[templateIndex], lastGeneratedDate: todayStr };
+                    }
+                    changed = true;
                 }
+            }
 
-                return { ...p, lastQueuePopDate: today };
-            });
-        }
-    }, [now, s.lastQueuePopDate]);
+            if (changed) {
+                return { ...p, queue: nextQ };
+            }
+            return p;
+        });
+    }, [now]);
 
     const startBreak = (c: S) => {
         const b = (c.durations[c.block as Block] || [0, 0])[1];
@@ -411,6 +449,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setTask: (t) => set(p => ({ ...p, task: t })),
         setNotes: (n) => set(p => ({ ...p, notes: n })),
         setQueue: (q) => set(p => ({ ...p, queue: q })),
+        removeTask: (id) => set(p => {
+            const taskToRemove = p.queue.find(q => q.id === id);
+            if (!taskToRemove) return p;
+            const newTrash = [taskToRemove, ...p.trash].slice(0, 10);
+            return { ...p, queue: p.queue.filter(q => q.id !== id), trash: newTrash };
+        }),
+        restoreTask: (id) => set(p => {
+            const taskToRestore = p.trash.find(t => t.id === id);
+            if (!taskToRestore) return p;
+            return { ...p, trash: p.trash.filter(t => t.id !== id), queue: [...p.queue, taskToRestore] };
+        }),
+        emptyTrash: () => set(p => ({ ...p, trash: [] })),
         setDuration: (b, w, br) => set(p => ({ ...p, durations: { ...p.durations, [b]: [w, br] } }))
     };
 

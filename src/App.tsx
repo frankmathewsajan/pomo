@@ -3,7 +3,7 @@ import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 import { AppProvider, useApp } from "./ctx";
 import Timer from "./Timer";
 import { T } from "./themes";
-import { BLOCK_NAMES, type Block } from "./types";
+import { BLOCK_NAMES, type Block, type RecurringOption } from "./types";
 import RichTextToolbar from "./RichTextToolbar";
 
 function ActivitySidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => void }) {
@@ -107,8 +107,11 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
     const editNotesRef = useRef<HTMLTextAreaElement>(null);
     const [isIdle, setIsIdle] = useState(false);
     const [isRecurring, setIsRecurring] = useState(false);
+    const [recOption, setRecOption] = useState<RecurringOption>("daily");
+    const [recDays, setRecDays] = useState<number[]>([]);
     const [showRecurring, setShowRecurring] = useState(false);
     const [showArchived, setShowArchived] = useState(false);
+    const [showTrash, setShowTrash] = useState(false);
     const [qTime, setQTime] = useState(() => {
         const d = new Date();
         d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -128,6 +131,8 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
             idleTime: isIdle ? qTime : undefined,
             isIdle,
             recurring: isRecurring,
+            recurringOption: isRecurring ? recOption : undefined,
+            recurringDays: isRecurring && recOption === "weekly" ? recDays : undefined,
             notes: qNotes.trim() || undefined,
             createdAt: Date.now()
         }]);
@@ -135,6 +140,8 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
         setQNotes("");
         setIsIdle(false);
         setIsRecurring(false);
+        setRecOption("daily");
+        setRecDays([]);
     };
 
     const swapInQueue = (id: string, dir: -1 | 1, visible: typeof queue) => {
@@ -200,6 +207,43 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
 
             <div className="flex flex-col gap-3 overflow-y-auto flex-1" style={{ padding: '1.25rem' }}>
                 {(() => {
+                    if (showTrash) {
+                        const { trash, restoreTask, removeTask, emptyTrash } = useApp();
+
+                        if (trash.length === 0) {
+                            return (
+                                <div className="flex flex-col items-center justify-center h-full gap-4">
+                                    <p className="text-[13px] opacity-50 text-center py-6">Trash is empty.</p>
+                                    <button className="text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity flex items-center gap-1 mt-4" onClick={() => setShowTrash(false)}>Back to Queue</button>
+                                </div>
+                            );
+                        }
+
+                        return (
+                            <>
+                                <div className="flex justify-between items-center mb-2 px-1">
+                                    <h3 className="text-xs font-bold uppercase tracking-wider opacity-60 m-0">Recently Deleted</h3>
+                                    <button className="text-[10px] uppercase font-bold text-red-500 hover:text-red-600 opacity-80 hover:opacity-100" onClick={emptyTrash}>Empty Trash</button>
+                                </div>
+                                {trash.map(t => (
+                                    <div key={t.id} className="hist-item relative group text-left flex justify-between gap-3 p-3 rounded transition-colors hover:bg-black/5 shrink-0 opacity-70 hover:opacity-100" style={{ border: '1px dashed var(--border-ring)' }}>
+                                        <div className="flex flex-col gap-1 w-full overflow-hidden truncate">
+                                            <span className="font-bold text-sm truncate">{t.task}</span>
+                                            {t.notes && <span className="text-[10px] opacity-60 truncate">{t.notes}</span>}
+                                        </div>
+                                        <div className="shrink-0 flex items-center gap-2">
+                                            <span className="text-[10px] font-black uppercase tracking-widest opacity-60">{t.type}</span>
+                                            <button className="px-2 py-1 text-[10px] uppercase font-bold bg-green-500 text-white rounded shadow-sm hover:bg-green-600 active:scale-95 transition-all" onClick={() => restoreTask(t.id)}>Restore</button>
+                                        </div>
+                                    </div>
+                                ))}
+                                <div className="pt-4 flex justify-center w-full mt-auto">
+                                    <button className="text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity flex items-center gap-1" onClick={() => setShowTrash(false)}>Back to Queue</button>
+                                </div>
+                            </>
+                        );
+                    }
+
                     const hasRecurring = queue.some(q => q.recurring && !q.archived);
                     const canHide = hasRecurring;
 
@@ -315,7 +359,7 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                             <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={i >= resolvedQueue.length - 1} onClick={() => swapInQueue(q.id, 1, resolvedQueue)}>↓</button>
                                             {editingId !== q.id && <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title="Edit" onClick={() => startEditing(q)}>✎</button>}
                                             <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title={q.archived ? "Unarchive" : "Archive"} onClick={() => setQueue(queue.map(x => x.id === q.id ? { ...x, archived: !x.archived } : x))}>{q.archived ? "⇧" : "⇩"}</button>
-                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-red-500 hover:text-white" onClick={() => setQueue(queue.filter(x => x.id !== q.id))}>✕</button>
+                                            <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-red-500 hover:text-white" onClick={() => { const { removeTask } = useApp(); removeTask(q.id); }}>✕</button>
                                         </div>
 
                                         <div className="flex justify-between w-full items-start gap-4 pr-1">
@@ -386,12 +430,19 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                                 );
                             })}
 
-                            <div className="pt-2 border-t border-[var(--border-ring)] flex justify-center w-full mt-2">
+                            <div className="pt-2 border-t border-[var(--border-ring)] flex justify-between items-center w-full mt-2 px-1">
                                 <button
                                     className="text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity flex items-center gap-1"
                                     onClick={() => setShowArchived(!showArchived)}
                                 >
                                     {showArchived ? "Back to Queue" : `View Archive (${queue.filter(q => q.archived).length})`}
+                                </button>
+                                <button
+                                    className="text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity flex items-center gap-1"
+                                    onClick={() => setShowTrash(true)}
+                                    title="View Deleted Tasks"
+                                >
+                                    Trash ({useApp().trash.length})
                                 </button>
                             </div>
                         </>
@@ -442,8 +493,39 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                     <Toggle on={isIdle} onToggle={() => setIsIdle(!isIdle)} label="Schedule" />
                 </div>
 
+                {isRecurring && (
+                    <div className="flex flex-col gap-2 mt-2 bg-white/5 p-2 rounded-lg border border-black/5">
+                        <select
+                            className="task-input text-xs font-bold w-full !py-1.5 focus:ring-0 cursor-pointer bg-white"
+                            value={recOption}
+                            onChange={(e) => setRecOption(e.target.value as RecurringOption)}
+                        >
+                            <option value="daily">Everyday</option>
+                            <option value="alternate">Alternate Days</option>
+                            <option value="weekdays">Weekdays (Tue-Sat)</option>
+                            <option value="holidays">Holidays (Sun-Mon)</option>
+                            <option value="weekly">Specific Days</option>
+                        </select>
+                        {recOption === "weekly" && (
+                            <div className="flex gap-1 justify-between px-1 mt-1">
+                                {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day, dIdx) => (
+                                    <button
+                                        key={day}
+                                        className={`w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center transition-colors ${recDays.includes(dIdx) ? "bg-[var(--accent)] text-white" : "bg-black/10 opacity-50 hover:opacity-100 text-[var(--text)]"}`}
+                                        onClick={() => {
+                                            setRecDays(prev => prev.includes(dIdx) ? prev.filter(d => d !== dIdx) : [...prev, dIdx].sort());
+                                        }}
+                                    >
+                                        {day}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {isIdle && (
-                    <input type="datetime-local" className="task-input flex-1 px-4 py-2 h-10 text-sm max-w-none shadow-sm border-none bg-white rounded-lg" value={qTime} onChange={e => setQTime(e.target.value)} />
+                    <input type="datetime-local" className="task-input flex-1 px-4 py-2 h-10 text-sm max-w-none shadow-sm border-none bg-white rounded-lg mt-2" value={qTime} onChange={e => setQTime(e.target.value)} />
                 )}
 
                 <button className="btn w-full py-3 mt-1 font-semibold tracking-wide rounded-lg bg-black text-white shadow-md hover:opacity-90 transition-all border-none" onClick={addQueue}>+ Add to Queue</button>
