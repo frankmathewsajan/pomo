@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
-    "release": "npm run tauri build"
+    "release": "npm run tauri build",
+    "release:win:github": "./release.ps1"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",
