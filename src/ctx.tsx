@@ -471,13 +471,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         removeTask: (id) => set(p => {
             const taskToRemove = p.queue.find(q => q.id === id);
             if (!taskToRemove) return p;
-            const newTrash = [taskToRemove, ...p.trash].slice(0, 10);
+            const currentTrash = Array.isArray(p.trash) ? p.trash : [];
+            const newTrash = [taskToRemove, ...currentTrash].slice(0, 50);
             return { ...p, queue: p.queue.filter(q => q.id !== id), trash: newTrash };
         }),
         restoreTask: (id) => set(p => {
-            const taskToRestore = p.trash.find(t => t.id === id);
+            const currentTrash = Array.isArray(p.trash) ? p.trash : [];
+            const taskToRestore = currentTrash.find(t => t.id === id);
             if (!taskToRestore) return p;
-            return { ...p, trash: p.trash.filter(t => t.id !== id), queue: [...p.queue, taskToRestore] };
+            return { ...p, trash: currentTrash.filter(t => t.id !== id), queue: [...p.queue, taskToRestore] };
         }),
         emptyTrash: () => set(p => ({ ...p, trash: [] })),
         setDuration: (b, w, br) => set(p => ({ ...p, durations: { ...p.durations, [b]: [w, br] } })),
