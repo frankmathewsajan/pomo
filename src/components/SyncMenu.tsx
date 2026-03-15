@@ -62,9 +62,10 @@ export default function SyncMenu() {
 
   return (
     <div className="relative" ref={menuRef}>
-      <button className="size-10 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-colors shadow-sm cursor-pointer" onClick={() => setOpen(!open)} title="Sync / Config">
+      <button className="size-10 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-colors shadow-sm cursor-pointer" onClick={() => setOpen(!open)} title="Settings" aria-label="Settings">
         <svg className="size-5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.094c.55 0 1.02.398 1.11.94l.196 1.188c.516.14 1.008.345 1.465.607l.995-.68a1.125 1.125 0 011.454.126l.773.773c.39.39.438 1.004.126 1.454l-.68.995c.262.457.467.95.607 1.465l1.188.196c.542.09.94.56.94 1.11v1.094c0 .55-.398 1.02-.94 1.11l-1.188.196a6.844 6.844 0 01-.607 1.465l.68.995c.312.45.264 1.063-.126 1.454l-.773.773a1.125 1.125 0 01-1.454.126l-.995-.68a6.844 6.844 0 01-1.465.607l-.196 1.188c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.02-.398-1.11-.94l-.196-1.188a6.844 6.844 0 01-1.465-.607l-.995.68a1.125 1.125 0 01-1.454-.126l-.773-.773a1.125 1.125 0 01-.126-1.454l.68-.995a6.844 6.844 0 01-.607-1.465l-1.188-.196a1.125 1.125 0 01-.94-1.11v-1.094c0-.55.398-1.02.94-1.11l1.188-.196c.14-.516.345-1.008.607-1.465l-.68-.995a1.125 1.125 0 01.126-1.454l.773-.773a1.125 1.125 0 011.454-.126l.995.68c.457-.262.95-.467 1.465-.607l.196-1.188z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       </button>
       {open && (

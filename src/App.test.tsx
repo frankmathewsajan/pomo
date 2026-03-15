@@ -1,8 +1,13 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { useEffect } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DEF_BLOCKS, BLOCK_NAMES, type Block, type QueuedBlock, type Entry, type HistoryStatus } from './types';
 import { T } from './utils/themes';
 import App from './App';
+import ActivitySidebar from './components/ActivitySidebar';
+import { AppProvider, useApp } from './context/AppContext';
 
 // ── Tauri mocks ──────────────────────────────────────────────────────────
 
@@ -32,6 +37,26 @@ beforeEach(() => {
     localStorage.clear();
 });
 
+// Seed helper used for tests that need a non-empty history list without relying on long timer flows.
+function SeededActivitySidebar({ history }: { history: Entry[] }) {
+    function SeedHistory() {
+        const { importConfig } = useApp();
+
+        useEffect(() => {
+            void importConfig({ history });
+        }, [history, importConfig]);
+
+        return null;
+    }
+
+    return (
+        <AppProvider>
+            <SeedHistory />
+            <ActivitySidebar isOpen onToggle={vi.fn()} />
+        </AppProvider>
+    );
+}
+
 // ── Types ────────────────────────────────────────────────────────────────
 
 describe('Types & Constants', () => {
@@ -40,9 +65,9 @@ describe('Types & Constants', () => {
     });
 
     it('DEF_BLOCKS defines correct [work, break] pairs', () => {
-        expect(DEF_BLOCKS.mini).toEqual([10, 2]);
+        expect(DEF_BLOCKS.mini).toEqual([15, 0]);
         expect(DEF_BLOCKS.normal).toEqual([25, 5]);
-        expect(DEF_BLOCKS.deep).toEqual([50, 10]);
+        expect(DEF_BLOCKS.deep).toEqual([52, 17]);
     });
 
     it('Block type accepts only valid keys', () => {
@@ -136,6 +161,17 @@ describe('Context & State Persistence', () => {
     });
 });
 
+// ── Desktop Bootstrap ────────────────────────────────────────────────────
+
+describe('Desktop Bootstrap', () => {
+    it('enables the Tauri single-instance guard for the main window', () => {
+        const libRs = readFileSync(resolve(process.cwd(), 'src-tauri', 'src', 'lib.rs'), 'utf8');
+        expect(libRs).toContain('tauri_plugin_single_instance::init');
+        expect(libRs).toContain('app.get_webview_window("main")');
+        expect(libRs).toContain('main.set_focus()');
+    });
+});
+
 // ── App Rendering ────────────────────────────────────────────────────────
 
 describe('App Layout', () => {
@@ -219,14 +255,55 @@ describe('Interactions', () => {
     it('clicking a block tab switches the timer duration', () => {
         render(<App />);
         fireEvent.click(screen.getByText('mini'));
-        // mini = 10 min
-        expect(screen.getByText('10:00')).toBeInTheDocument();
+        // mini = 15 min
+        expect(screen.getByText('15:00')).toBeInTheDocument();
     });
 
-    it('clicking deep block shows 50:00', () => {
+    it('clicking deep block shows 52:00', () => {
         render(<App />);
         fireEvent.click(screen.getByText('deep'));
-        expect(screen.getByText('50:00')).toBeInTheDocument();
+        expect(screen.getByText('52:00')).toBeInTheDocument();
+    });
+
+    it('shows reset and return to queue for queue-sourced tasks', () => {
+        render(<App />);
+        fireEvent.click(screen.getByText('Queue'));
+        fireEvent.change(screen.getByPlaceholderText('Task name...'), { target: { value: 'Queue Back' } });
+        fireEvent.click(screen.getByText('+ Add to Queue'));
+
+        fireEvent.click(screen.getByText('Choose Task'));
+        fireEvent.click(screen.getByText('Pause'));
+
+        expect(screen.getByText('Reset and Return to Queue')).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Reset and Return to Queue'));
+
+        expect(screen.getByPlaceholderText('Task name…')).toHaveValue('');
+        expect(screen.getByRole('option', { name: /Queue Back \(normal\)/i })).toBeInTheDocument();
+    });
+
+    it('roulette pick pulls the only available queued task into the timer', () => {
+        render(<App />);
+        fireEvent.click(screen.getByText('Queue'));
+        fireEvent.change(screen.getByPlaceholderText('Task name...'), { target: { value: 'Roulette Task' } });
+        fireEvent.click(screen.getByText('+ Add to Queue'));
+
+        fireEvent.click(screen.getByText('Roulette Pick'));
+
+        expect(screen.getByPlaceholderText('Task name…')).toHaveValue('Roulette Task');
+    });
+
+    it('queue quick-pick applies the spacing and visibility classes used for the updated UI', () => {
+        render(<App />);
+        fireEvent.click(screen.getByText('Queue'));
+        fireEvent.change(screen.getByPlaceholderText('Task name...'), { target: { value: 'Spaced Task' } });
+        fireEvent.click(screen.getByText('+ Add to Queue'));
+
+        const panel = screen.getByTestId('queue-quick-pick');
+        const picker = screen.getByRole('combobox', { name: 'Queue task picker' });
+
+        expect(panel).toHaveClass('mt-3', 'px-3', 'py-3', 'gap-3');
+        expect(picker).toHaveClass('text-sm', 'py-3', 'px-4');
+        expect(screen.getByText('Queue Actions')).toBeVisible();
     });
 
     it('selecting a block tab highlights it', () => {
@@ -246,10 +323,26 @@ describe('Sidebar Interactions', () => {
         expect(screen.getByText('Up Next')).toBeInTheDocument();
     });
 
+    it('queue sidebar can be collapsed again from its header control', () => {
+        render(<App />);
+        fireEvent.click(screen.getByText('Queue'));
+        fireEvent.click(screen.getByText('▶'));
+        expect(screen.queryByText('Up Next')).not.toBeInTheDocument();
+        expect(screen.getByText('Queue')).toBeInTheDocument();
+    });
+
     it('clicking collapsed Activity sidebar opens it', () => {
         render(<App />);
         fireEvent.click(screen.getByText('Activity'));
         expect(screen.getByText('Activity & History')).toBeInTheDocument();
+    });
+
+    it('activity sidebar can be collapsed again from its header control', () => {
+        render(<App />);
+        fireEvent.click(screen.getByText('Activity'));
+        fireEvent.click(screen.getByText('◀'));
+        expect(screen.queryByText('Activity & History')).not.toBeInTheDocument();
+        expect(screen.getByText('Activity')).toBeInTheDocument();
     });
 
     it('Queue sidebar shows add block form when open', () => {
@@ -275,6 +368,46 @@ describe('Sidebar Interactions', () => {
         expect(screen.getByText('New Task')).toBeInTheDocument();
     });
 
+    it('supports recurring items and reveals them on demand', () => {
+        render(<App />);
+        fireEvent.click(screen.getByText('Queue'));
+
+        fireEvent.change(screen.getByPlaceholderText('Task name...'), { target: { value: 'Recurring Task' } });
+        fireEvent.click(screen.getByText('Recurring'));
+        fireEvent.click(screen.getByText('+ Add to Queue'));
+
+        expect(screen.getByText('Show Recurring')).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Show Recurring'));
+        expect(screen.getByText('Recurring Task')).toBeInTheDocument();
+    });
+
+    it('supports archive view, trash restore, and queue return flows', () => {
+        render(<App />);
+        fireEvent.click(screen.getByText('Queue'));
+
+        fireEvent.change(screen.getByPlaceholderText('Task name...'), { target: { value: 'Archive Task' } });
+        fireEvent.click(screen.getByText('+ Add to Queue'));
+        fireEvent.change(screen.getByPlaceholderText('Task name...'), { target: { value: 'Visible Task' } });
+        fireEvent.click(screen.getByText('+ Add to Queue'));
+
+        fireEvent.click(screen.getByLabelText('Archive Archive Task'));
+        expect(screen.getByText('View Archive (1)')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByText('View Archive (1)'));
+        fireEvent.click(screen.getByLabelText('Unarchive Archive Task'));
+        fireEvent.click(screen.getByText('Back to Queue'));
+        expect(screen.getByText('Archive Task')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByLabelText('Delete Archive Task'));
+        expect(screen.getByText('Trash (1)')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByText('Trash (1)'));
+        expect(screen.getByText('Recently Deleted')).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Restore'));
+        fireEvent.click(screen.getByText('Back to Queue'));
+        expect(screen.getByText('Archive Task')).toBeInTheDocument();
+    });
+
     it('empty task name does not add to queue', () => {
         render(<App />);
         fireEvent.click(screen.getByText('Queue'));
@@ -290,6 +423,25 @@ describe('Sidebar Interactions', () => {
         expect(screen.getByText('Early')).toBeInTheDocument();
     });
 
+    it('Activity sidebar lets the user hide an individual completed item', async () => {
+        render(
+            <SeededActivitySidebar
+                history={[
+                    { task: 'Completed item', block: 'normal', at: Date.now(), status: 'completed' },
+                    { task: 'Early stop', block: 'mini', at: Date.now() - 1000, status: 'early' },
+                ]}
+            />
+        );
+
+        expect(await screen.findByText('Completed item')).toBeInTheDocument();
+        expect(screen.getByText('Early stop')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByLabelText('Hide activity Completed item'));
+
+        expect(screen.queryByText('Completed item')).not.toBeInTheDocument();
+        expect(screen.getByText('Early stop')).toBeInTheDocument();
+    });
+
     it('Activity sidebar shows empty state', () => {
         render(<App />);
         fireEvent.click(screen.getByText('Activity'));
@@ -297,18 +449,28 @@ describe('Sidebar Interactions', () => {
     });
 });
 
-// ── SyncMenu ─────────────────────────────────────────────────────────────
+// ── Settings Menu ────────────────────────────────────────────────────────
 
 describe('SyncMenu', () => {
-    it('renders sync button with tooltip', () => {
+    it('renders settings button with tooltip', () => {
         render(<App />);
-        expect(screen.getByTitle('Sync / Config')).toBeInTheDocument();
+        expect(screen.getByTitle('Settings')).toBeInTheDocument();
     });
 
-    it('clicking sync button reveals export/import options', () => {
+    it('clicking settings reveals export/import options', () => {
         render(<App />);
-        fireEvent.click(screen.getByTitle('Sync / Config'));
+        fireEvent.click(screen.getByTitle('Settings'));
         expect(screen.getByText('Export Config (JSON)')).toBeInTheDocument();
         expect(screen.getByText('Import Config (JSON)')).toBeInTheDocument();
+    });
+
+    it('keeps settings focused on toggles and config actions without the default block copy', () => {
+        render(<App />);
+        fireEvent.click(screen.getByTitle('Settings'));
+        expect(screen.getByText('Wait function')).toBeInTheDocument();
+        expect(screen.getByText('Advanced Notes')).toBeInTheDocument();
+        expect(screen.getByText('Global Tags')).toBeInTheDocument();
+        expect(screen.queryByText('Block timing')).not.toBeInTheDocument();
+        expect(screen.queryByText('Default blocks')).not.toBeInTheDocument();
     });
 });

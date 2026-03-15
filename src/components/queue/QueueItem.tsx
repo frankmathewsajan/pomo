@@ -55,11 +55,11 @@ export default function QueueItem({
   return (
     <div className="hist-item relative group text-left flex flex-col justify-between gap-3 p-4 rounded transition-colors hover:bg-black/5 shrink-0" style={{ border: `1px ${isScheduled ? "double" : "solid"} ${isOldTask ? "rgba(239, 68, 68, 0.4)" : "var(--border-ring)"}`, borderWidth: isScheduled ? "3px" : "1px" }}>
       <div className="absolute top-2 right-2 flex items-center bg-(--card)/90 backdrop-blur-md rounded-md shadow-sm border border-(--border-ring) opacity-0 group-hover:opacity-100 transition-opacity z-10 px-1 py-1">
-        <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={index <= 0} onClick={() => onMove(item.id, -1)}>↑</button>
-        <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" disabled={index >= total - 1} onClick={() => onMove(item.id, 1)}>↓</button>
+        <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" title="Move up" disabled={index <= 0} onClick={() => onMove(item.id, -1)}>↑</button>
+        <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded hover:bg-black/10" title="Move down" disabled={index >= total - 1} onClick={() => onMove(item.id, 1)}>↓</button>
         {!isEditing && <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title="Edit" onClick={() => onStartEdit(item)}>✎</button>}
-        <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title={item.archived ? "Unarchive" : "Archive"} onClick={() => onArchiveToggle(item.id)}>{item.archived ? "⇧" : "⇩"}</button>
-        <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-red-500 hover:text-white" onClick={() => onRemove(item.id)}>✕</button>
+        <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-black/10 transition-colors" title={item.archived ? "Unarchive" : "Archive"} aria-label={`${item.archived ? "Unarchive" : "Archive"} ${item.task}`} onClick={() => onArchiveToggle(item.id)}>{item.archived ? "⇧" : "⇩"}</button>
+        <button className="wb w-6 h-6 flex items-center justify-center p-0 rounded ml-1 hover:bg-red-500 hover:text-white" title="Delete" aria-label={`Delete ${item.task}`} onClick={() => onRemove(item.id)}>✕</button>
       </div>
 
       <div className="flex justify-between w-full items-start gap-4 pr-1">

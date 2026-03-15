@@ -15,6 +15,7 @@ type PendingNext = {
     notes: string;
     idleTime?: string;
     tags?: string[];
+    sourceQueueItem?: QueuedBlock;
 } | null;
 
 type S = {
@@ -40,12 +41,14 @@ type S = {
     trash: QueuedBlock[];
     globalTags: string[];
     currentTags?: string[];
+    activeQueueItem: QueuedBlock | null;
+    miniPrompt: boolean;
 };
 
 const def: S = {
     theme: 0, running: false, mode: "w", block: "normal", task: "", queue: [],
     durations: DEF_BLOCKS, targetMs: null, pausedLeftMs: DEF_BLOCKS.normal[0] * 60000, notes: "",
-    pendingNext: null, trash: [], globalTags: [], currentTags: []
+    pendingNext: null, trash: [], globalTags: [], currentTags: [], activeQueueItem: null, miniPrompt: false
 };
 
 function normalizeState(stored: unknown): S {
@@ -82,6 +85,7 @@ type Ctx = S & {
     startWait: (task: string, durationMs: number) => void;
     resolveWait: () => void;
     abandonWait: () => void;
+    resetAndRequeue: () => void;
     nextInQueue: () => void;
     chooseFromQueue: (id: string) => void;
     rouletteQueuePick: () => void;
@@ -233,6 +237,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         set({ ...c, mode: "b", running: true, targetMs: Date.now() + b * 60000, pausedLeftMs: null });
     };
 
+    const completeWithoutBreak = (c: S) => {
+        const workMs = (c.durations[c.block as Block] || [25, 0])[0] * 60000;
+        set({
+            ...c,
+            mode: "w",
+            running: false,
+            targetMs: null,
+            pausedLeftMs: workMs,
+            task: "",
+            notes: "",
+            currentTags: [],
+            pendingNext: null,
+            activeQueueItem: null,
+            miniPrompt: c.block === "mini"
+        });
+    };
+
     const startPendingTask = (c: S) => {
         const p = c.pendingNext;
         if (!p) return;
@@ -247,10 +268,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 target = new Date(ct.getFullYear(), ct.getMonth(), ct.getDate(), h, m).getTime();
                 if (target <= ct.getTime()) target += 86400000;
             }
-            set({ ...c, mode: "idle", block: p.type, task: p.task, notes: p.notes, currentTags: p.tags, running: true, targetMs: target, pausedLeftMs: null, pendingNext: null });
+            set({ ...c, mode: "idle", block: p.type, task: p.task, notes: p.notes, currentTags: p.tags, running: true, targetMs: target, pausedLeftMs: null, pendingNext: null, activeQueueItem: p.sourceQueueItem || null, miniPrompt: false });
         } else {
             const dur = (c.durations[p.type] || [25, 5])[0] * 60000;
-            set({ ...c, mode: "w", block: p.type, task: p.task, notes: p.notes, currentTags: p.tags, running: true, targetMs: Date.now() + dur, pausedLeftMs: null, pendingNext: null });
+            set({ ...c, mode: "w", block: p.type, task: p.task, notes: p.notes, currentTags: p.tags, running: true, targetMs: Date.now() + dur, pausedLeftMs: null, pendingNext: null, activeQueueItem: p.sourceQueueItem || null, miniPrompt: false });
         }
     };
 
@@ -258,7 +279,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const c = ref.current;
         if (c.mode === "w") {
             setHistory(h => [{ task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "completed" as const, tags: c.currentTags }, ...h].slice(0, 50));
-            startBreak(c);
+            const breakMinutes = (c.durations[c.block as Block] || [0, 0])[1];
+            if (breakMinutes > 0) {
+                startBreak(c);
+            } else {
+                completeWithoutBreak(c);
+            }
         } else if (c.mode === "b") {
             if (c.pendingNext) {
                 startPendingTask(c);
@@ -343,8 +369,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     task: qItem.task,
                     notes: qItem.notes || "",
                     idleTime: qItem.idleTime,
-                    tags: qItem.tags
-                }
+                    tags: qItem.tags,
+                    sourceQueueItem: qItem
+                },
+                miniPrompt: false
             };
         }
 
@@ -369,7 +397,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 running: true,
                 targetMs: target,
                 pausedLeftMs: null,
-                pendingNext: null
+                pendingNext: null,
+                activeQueueItem: qItem,
+                miniPrompt: false
             };
         }
 
@@ -385,7 +415,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             running: true,
             targetMs: Date.now() + dur,
             pausedLeftMs: null,
-            pendingNext: null
+            pendingNext: null,
+            activeQueueItem: qItem,
+            miniPrompt: false
         };
     };
 
@@ -427,20 +459,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 const runtimeLeftMs = p.targetMs ? Math.max(0, p.targetMs - Date.now()) : (p.pausedLeftMs || 0);
                 return { ...p, running: false, targetMs: null, pausedLeftMs: runtimeLeftMs };
             } else {
-                return { ...p, running: true, targetMs: Date.now() + (p.pausedLeftMs || 0), pausedLeftMs: null };
+                return { ...p, running: true, targetMs: Date.now() + (p.pausedLeftMs || 0), pausedLeftMs: null, miniPrompt: false };
             }
         }),
         reset: () => set(p => {
             let left = 0;
             if (p.mode === "idle") left = 1000;
             else left = p.durations[p.block as Block][p.mode === "w" ? 0 : 1] * 60000;
-            return { ...p, running: false, targetMs: null, pausedLeftMs: left };
+            return { ...p, running: false, targetMs: null, pausedLeftMs: left, miniPrompt: false };
+        }),
+        resetAndRequeue: () => set(p => {
+            if (p.mode !== "w" || p.running || !p.activeQueueItem) return p;
+            const restored: QueuedBlock = {
+                ...p.activeQueueItem,
+                task: p.task,
+                notes: p.notes,
+                tags: p.currentTags,
+            };
+            const left = p.durations[p.block as Block][0] * 60000;
+            return {
+                ...p,
+                running: false,
+                targetMs: null,
+                pausedLeftMs: left,
+                task: "",
+                notes: "",
+                currentTags: [],
+                activeQueueItem: null,
+                miniPrompt: false,
+                queue: [restored, ...p.queue]
+            };
         }),
         finish: () => {
             const c = ref.current;
             if (c.mode !== "w") return;
             setHistory(h => [{ task: c.task || "Untitled", block: c.block as Block, at: Date.now(), status: "early" as const, tags: c.currentTags }, ...h].slice(0, 50));
-            startBreak(c);
+            const breakMinutes = (c.durations[c.block as Block] || [0, 0])[1];
+            if (breakMinutes > 0) {
+                startBreak(c);
+            } else {
+                completeWithoutBreak(c);
+            }
         },
         startWait,
         resolveWait,
@@ -454,19 +513,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
                         task: p.task,
                         notes: p.notes,
                         idleTime: undefined,
-                        tags: p.currentTags
-                    }
+                        tags: p.currentTags,
+                        sourceQueueItem: p.activeQueueItem || undefined
+                    },
+                    miniPrompt: false
                 };
             }
             const dur = (p.durations[p.block as Block] || [25, 5])[0] * 60000;
-            return { ...p, mode: "w", running: true, targetMs: Date.now() + dur, pausedLeftMs: null, pendingNext: null };
+            return { ...p, mode: "w", running: true, targetMs: Date.now() + dur, pausedLeftMs: null, pendingNext: null, miniPrompt: false };
         }),
         nextInQueue: () => set(p => {
             const selectable = p.queue.filter(q => !q.archived && !q.recurring);
 
             if (selectable.length === 0) {
                 const [w] = p.durations[p.block as Block] || [10, 2];
-                return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "", notes: "", currentTags: [], pendingNext: null };
+                return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "", notes: "", currentTags: [], pendingNext: null, activeQueueItem: null, miniPrompt: false };
             }
 
             const fixedBlocks = selectable.filter(q => q.idleTime).map(q => {
@@ -531,7 +592,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 return startQueueItem(p, qItem, qIndex);
             } else {
                 const [w] = p.durations[p.block as Block] || [10, 2];
-                return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "", notes: "", currentTags: [], pendingNext: null };
+                return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "", notes: "", currentTags: [], pendingNext: null, activeQueueItem: null, miniPrompt: false };
             }
         }),
         chooseFromQueue: (id) => set(p => {
@@ -586,8 +647,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return { ...p, pendingNext: null, queue: [restored, ...p.queue] };
         }),
         next: () => set(p => ({ ...p, theme: (p.theme + 1) % T.length })),
-        setBlock: (b) => set(p => ({ ...p, block: b, mode: "w", running: false, targetMs: null, pausedLeftMs: p.durations[b][0] * 60000 })),
-        setTask: (t) => set(p => ({ ...p, task: t })),
+        setBlock: (b) => set(p => ({ ...p, block: b, mode: "w", running: false, targetMs: null, pausedLeftMs: p.durations[b][0] * 60000, miniPrompt: false })),
+        setTask: (t) => set(p => ({ ...p, task: t, miniPrompt: t.trim() ? false : p.miniPrompt })),
         setNotes: (n) => set(p => ({ ...p, notes: n })),
         setQueue: (q) => set(p => ({ ...p, queue: q })),
         removeTask: (id) => set(p => {
@@ -604,7 +665,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return { ...p, trash: currentTrash.filter(t => t.id !== id), queue: [...p.queue, taskToRestore] };
         }),
         emptyTrash: () => set(p => ({ ...p, trash: [] })),
-        setDuration: (b, w, br) => set(p => ({ ...p, durations: { ...p.durations, [b]: [w, br] } })),
+        setDuration: (b, w, br) => set(p => {
+            const nextDurations = { ...p.durations, [b]: [w, br] as const };
+            const nextState: S = { ...p, durations: nextDurations };
+
+            if (!p.running && p.mode === "w" && p.block === b) {
+                nextState.pausedLeftMs = w * 60000;
+            }
+
+            return nextState;
+        }),
         addGlobalTag: (t) => set(p => p.globalTags.includes(t) ? p : { ...p, globalTags: [...p.globalTags, t] }),
         removeGlobalTag: (t) => set(p => ({ ...p, globalTags: p.globalTags.filter(x => x !== t) })),
         setCurrentTags: (tags) => set(p => ({ ...p, currentTags: tags })),

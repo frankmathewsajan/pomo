@@ -1,4 +1,4 @@
-export const DEF_BLOCKS = { mini: [10, 2], normal: [25, 5], deep: [50, 10] } as const;
+export const DEF_BLOCKS = { mini: [15, 0], normal: [25, 5], deep: [52, 17] } as const;
 export type Block = keyof typeof DEF_BLOCKS;
 export const BLOCK_NAMES: Block[] = ["mini", "normal", "deep"];
 

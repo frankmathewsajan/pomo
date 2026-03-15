@@ -4,7 +4,7 @@ import { isDueNow } from "../../utils/queueTime";
 import RichTextToolbar from "../RichTextToolbar";
 
 export default function TimerNotes() {
-  const { mode, running, task, notes, advancedNotes, setTask, setNotes, queue, chooseFromQueue, rouletteQueuePick } = useApp();
+  const { mode, running, task, notes, advancedNotes, miniPrompt, setTask, setNotes, queue, chooseFromQueue, rouletteQueuePick } = useApp();
   const [editingNotes, setEditingNotes] = useState(false);
   const [tempNotes, setTempNotes] = useState(notes || "");
   const [selectedQueueId, setSelectedQueueId] = useState("");
@@ -40,9 +40,9 @@ export default function TimerNotes() {
       <input className="task-input w-full text-center py-3" disabled={isWait} placeholder="Task name…" value={task} onChange={(e) => setTask(e.target.value)} />
 
       {shouldShowQuickPick && (
-        <div className="w-full mt-1 p-2 rounded-lg border border-black/5 bg-black/5 flex flex-col gap-2">
+        <div data-testid="queue-quick-pick" className="w-full mt-3 px-3 py-3 rounded-lg border border-black/5 bg-black/5 flex flex-col gap-3">
           <p className="text-[10px] uppercase tracking-widest font-bold opacity-55 text-center">Queue Actions</p>
-          <select className="task-input w-full text-xs font-semibold py-2 bg-white" value={selectedQueueId} onChange={(e) => setSelectedQueueId(e.target.value)}>
+          <select aria-label="Queue task picker" className="task-input w-full text-sm sm:text-base font-semibold py-3 px-4 bg-white" value={selectedQueueId} onChange={(e) => setSelectedQueueId(e.target.value)}>
             {queueChoices.map((q) => {
               const scheduled = !!q.idleTime;
               const due = q.idleTime ? isDueNow(q.idleTime) : true;
@@ -53,6 +53,7 @@ export default function TimerNotes() {
             <button className="btn secondary flex-1 text-xs py-2" disabled={!selectedQueueId} onClick={() => selectedQueueId && chooseFromQueue(selectedQueueId)}>Choose Task</button>
             <button className="btn highlight flex-1 text-xs py-2 disabled:opacity-50" disabled={rouletteChoices.length === 0} onClick={rouletteQueuePick} title="Scheduled tasks are excluded until their due time.">Roulette Pick</button>
           </div>
+          {miniPrompt && <p className="text-[11px] sm:text-xs font-semibold text-center opacity-70">Mini sprint finished. Pull another mini from the queue or switch to Normal or Deep.</p>}
         </div>
       )}
 

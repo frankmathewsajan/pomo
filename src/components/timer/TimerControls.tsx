@@ -2,17 +2,21 @@ import { useApp } from "../../context/AppContext";
 import { useWaitSetup } from "./WaitSetupForm";
 
 export default function TimerControls() {
-  const { running, mode, queue, pendingNext, waitTask, toggle, reset, finish, continueSame, nextInQueue, cancelPending, resolveWait, abandonWait } = useApp();
+  const { running, mode, block, queue, pendingNext, waitTask, activeQueueItem, toggle, reset, resetAndRequeue, finish, continueSame, nextInQueue, cancelPending, resolveWait, abandonWait } = useApp();
   const { openSetup } = useWaitSetup();
   const isWait = mode === "wait";
+  const canRequeueOnReset = mode === "w" && !running && !!activeQueueItem;
 
   if (mode === "w") {
     return (
-      <div className="flex gap-3 sm:gap-4 w-full max-w-75">
-        <button className="btn transition-transform flex-1 text-sm py-2.5 sm:py-3" onClick={toggle}>{running ? "Pause" : "Start"}</button>
-        {running && <button className="btn secondary transition-transform flex-1 text-sm py-2.5 sm:py-3 opacity-90" onClick={openSetup}>Wait</button>}
-        {running && <button className="btn transition-transform flex-1 text-sm py-2.5 sm:py-3" style={{ background: "var(--card)", color: "var(--text)" }} onClick={finish}>Finish</button>}
-        {!running && <button className="btn secondary transition-transform flex-1 text-sm py-2.5 sm:py-3" onClick={reset}>Reset</button>}
+      <div className="flex flex-col gap-3 w-full max-w-75">
+        <div className="flex gap-3 sm:gap-4 w-full">
+          <button className="btn transition-transform flex-1 text-sm py-2.5 sm:py-3" onClick={toggle}>{running ? "Pause" : "Start"}</button>
+          {running && <button className="btn secondary transition-transform flex-1 text-sm py-2.5 sm:py-3 opacity-90" onClick={openSetup}>Wait</button>}
+          {running && <button className="btn transition-transform flex-1 text-sm py-2.5 sm:py-3" style={{ background: "var(--card)", color: "var(--text)" }} onClick={finish}>Finish</button>}
+          {!running && <button className="btn secondary transition-transform flex-1 text-sm py-2.5 sm:py-3" onClick={reset}>Reset</button>}
+        </div>
+        {canRequeueOnReset && <button className="btn highlight transition-transform w-full text-sm py-2.5 sm:py-3" onClick={resetAndRequeue}>Reset and Return to Queue</button>}
       </div>
     );
   }
@@ -44,7 +48,11 @@ export default function TimerControls() {
             <button className="btn secondary transition-transform text-xs py-1.5 px-4 opacity-70 hover:opacity-100" onClick={cancelPending}>Cancel</button>
           </div>
         ) : (
-          <p className="text-sm opacity-60 font-medium tracking-wide text-center">Take a break... or optionally skip to:</p>
+          <div className="flex flex-col gap-2 items-center">
+            <p className="text-sm opacity-60 font-medium tracking-wide text-center">Take a break... or optionally skip to:</p>
+            {block === "normal" && <p className="text-xs max-w-[320px] text-center opacity-70">Pattern interrupt: use the 20-20-20 rule. Look 20 feet away for 20 seconds, then spend the rest of the 5 minutes moving and resetting your posture.</p>}
+            {block === "deep" && <p className="text-xs max-w-[320px] text-center opacity-70">Deep reset: step away for the full 17 minutes so your default mode network can recover before the next analytical block.</p>}
+          </div>
         )}
         <div className="flex flex-col sm:flex-row gap-3 w-full max-w-[320px]">
           <button className="btn secondary transition-transform flex-1 text-sm py-2.5 sm:py-3" onClick={continueSame}>Continue Same</button>

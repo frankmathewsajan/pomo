@@ -10,15 +10,19 @@ export default function ActivitySidebar({ isOpen, onToggle }: ActivitySidebarPro
   const { history } = useApp();
   const [filter, setFilter] = useState<"all" | "completed" | "early" | "abandoned">("all");
   const [dateFilter, setDateFilter] = useState("");
+  const [hiddenEntries, setHiddenEntries] = useState<string[]>([]);
+
+  const getEntryKey = (entry: (typeof history)[number]) => `${entry.at}:${entry.block}:${entry.status}:${entry.task}`;
 
   const filtered = useMemo(
     () =>
       history.filter((h) => {
+        if (hiddenEntries.includes(getEntryKey(h))) return false;
         if (filter !== "all" && h.status !== filter) return false;
         if (dateFilter && new Date(h.at).toLocaleDateString("en-CA") !== dateFilter) return false;
         return true;
       }),
-    [history, filter, dateFilter]
+    [history, filter, dateFilter, hiddenEntries]
   );
 
   const groupedFiltered = useMemo(
@@ -69,6 +73,7 @@ export default function ActivitySidebar({ isOpen, onToggle }: ActivitySidebarPro
           <input type="date" className="task-input w-full px-4 py-2 text-xs font-semibold h-10 border-none bg-black/5 focus:bg-white focus:ring-2 focus:ring-black/10 rounded-lg shadow-inner transition-all max-w-none" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
           {dateFilter && <button className="absolute right-2 wb size-6 opacity-60 hover:opacity-100 shrink-0 bg-white rounded shadow-sm border border-black/5" title="Clear Date" onClick={() => setDateFilter("")}>✕</button>}
         </div>
+
       </div>
 
       <div className="flex flex-col gap-3 overflow-y-auto flex-1" style={{ padding: "1.25rem" }}>
@@ -79,9 +84,21 @@ export default function ActivitySidebar({ isOpen, onToggle }: ActivitySidebarPro
                 <span className={`font-semibold text-sm truncate ${h.status === "abandoned" ? "line-through" : ""}`}>{h.task || "Untitled"}</span>
                 {h.count > 1 && <span className="text-[10px] font-bold opacity-60 bg-black/5 px-1.5 py-0.5 rounded-full shrink-0">x{h.count}</span>}
               </div>
-              <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 ${h.status === "early" ? "bg-red-500/10 text-red-600" : h.status === "abandoned" ? "bg-zinc-500/10 text-zinc-500" : h.status === "micro-task" ? "bg-blue-500/10 text-blue-500" : "bg-green-500/10 text-green-600"}`}>
-                {h.status}
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 ${h.status === "early" ? "bg-red-500/10 text-red-600" : h.status === "abandoned" ? "bg-zinc-500/10 text-zinc-500" : h.status === "micro-task" ? "bg-blue-500/10 text-blue-500" : "bg-green-500/10 text-green-600"}`}>
+                  {h.status}
+                </span>
+                {h.status === "completed" && (
+                  <button
+                    className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 bg-black/5 hover:bg-black/10 transition-colors"
+                    title="Hide activity"
+                    aria-label={`Hide activity ${h.task || "Untitled"}`}
+                    onClick={() => setHiddenEntries((current) => [...current, getEntryKey(h)])}
+                  >
+                    Hide
+                  </button>
+                )}
+              </div>
             </div>
             <span className="opacity-60 text-[10px] font-bold uppercase tracking-wider">{h.block} • {new Date(h.at).toLocaleDateString()} {new Date(h.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
           </div>
