@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DEF_BLOCKS, BLOCK_NAMES, type Block, type QueuedBlock, type Entry, type HistoryStatus } from './types';
-import { T } from './themes';
+import { T } from './utils/themes';
 import App from './App';
 
 // ── Tauri mocks ──────────────────────────────────────────────────────────

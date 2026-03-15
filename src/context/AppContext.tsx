@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { T } from "./themes";
-import { type Block, type QueuedBlock, type Entry, DEF_BLOCKS } from "./types";
-import { playStartSound } from "./sounds";
+import { T } from "../utils/themes";
+import { type Block, type QueuedBlock, type Entry, DEF_BLOCKS } from "../types";
+import { playStartSound } from "../utils/sounds";
+import { getFixedTarget } from "../utils/queueTime";
 
 const K = "pomo-state", HK = "pomo-history";
 
@@ -68,6 +69,8 @@ type Ctx = S & {
     resolveWait: () => void;
     abandonWait: () => void;
     nextInQueue: () => void;
+    chooseFromQueue: (id: string) => void;
+    rouletteQueuePick: () => void;
     cancelPending: () => void;
     next: () => void;
     setBlock: (b: Block) => void;
@@ -90,88 +93,86 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [history, setHistory] = useState(loadH);
     const ref = useRef(s);
     ref.current = s;
-    const [now, setNow] = useState(Date.now());
 
     useEffect(() => { localStorage.setItem(K, JSON.stringify(s)); }, [s]);
     useEffect(() => { localStorage.setItem(HK, JSON.stringify(history)); }, [history]);
 
-    // High fidelity absolute time ticker
-    useEffect(() => {
-        const id = setInterval(() => setNow(Date.now()), 100);
-        return () => clearInterval(id);
-    }, []);
-
     // Daily recurring task round robin
     useEffect(() => {
-        const today = new Date(now);
-        const todayStr = today.toLocaleDateString("en-CA"); // e.g., "YYYY-MM-DD"
+        const generateRecurringTasks = () => {
+            const today = new Date();
+            const todayStr = today.toLocaleDateString("en-CA");
 
-        set(p => {
-            let changed = false;
-            let nextQ = [...p.queue];
-            const activeTemplates = nextQ.filter(q => q.recurring && !q.archived);
+            set(p => {
+                let changed = false;
+                let nextQ = [...p.queue];
+                const activeTemplates = nextQ.filter(q => q.recurring && !q.archived);
 
-            for (const t of activeTemplates) {
-                if (t.lastGeneratedDate === todayStr) continue;
+                for (const t of activeTemplates) {
+                    if (t.lastGeneratedDate === todayStr) continue;
 
-                let shouldGenerate = false;
-                const opt = t.recurringOption || "daily";
-                const day = today.getDay(); // 0=Sun, ..., 6=Sat
+                    let shouldGenerate = false;
+                    const opt = t.recurringOption || "daily";
+                    const day = today.getDay();
 
-                if (opt === "daily") {
-                    shouldGenerate = true;
-                } else if (opt === "alternate") {
-                    if (!t.lastGeneratedDate) {
+                    if (opt === "daily") {
                         shouldGenerate = true;
-                    } else {
-                        const lastDate = new Date(t.lastGeneratedDate);
-                        const diffTime = Math.abs(today.getTime() - lastDate.getTime());
-                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                        if (diffDays >= 2) shouldGenerate = true;
-                    }
-                } else if (opt === "weekdays") {
-                    if (day >= 2 && day <= 6) shouldGenerate = true; // Tue to Sat
-                } else if (opt === "holidays") {
-                    if (day === 0 || day === 1) shouldGenerate = true; // Sun and Mon
-                } else if (opt === "weekly") {
-                    if (t.recurringDays && t.recurringDays.includes(day)) shouldGenerate = true;
-                }
-
-                if (shouldGenerate) {
-                    let newIdleTime = undefined;
-                    if (t.idleTime) {
-                        if (t.idleTime.includes("T")) {
-                            const timePart = t.idleTime.split("T")[1];
-                            newIdleTime = `${todayStr}T${timePart}`;
+                    } else if (opt === "alternate") {
+                        if (!t.lastGeneratedDate) {
+                            shouldGenerate = true;
                         } else {
-                            newIdleTime = `${todayStr}T${t.idleTime}`;
+                            const lastDate = new Date(t.lastGeneratedDate);
+                            const diffTime = Math.abs(today.getTime() - lastDate.getTime());
+                            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                            if (diffDays >= 2) shouldGenerate = true;
                         }
+                    } else if (opt === "weekdays") {
+                        if (day >= 2 && day <= 6) shouldGenerate = true;
+                    } else if (opt === "holidays") {
+                        if (day === 0 || day === 1) shouldGenerate = true;
+                    } else if (opt === "weekly") {
+                        if (t.recurringDays && t.recurringDays.includes(day)) shouldGenerate = true;
                     }
 
-                    const newTask: QueuedBlock = {
-                        ...t,
-                        id: Math.random().toString(36).substring(7),
-                        recurring: false,
-                        idleTime: newIdleTime,
-                        createdAt: Date.now()
-                    };
-                    nextQ.push(newTask);
+                    if (shouldGenerate) {
+                        let newIdleTime = undefined;
+                        if (t.idleTime) {
+                            if (t.idleTime.includes("T")) {
+                                const timePart = t.idleTime.split("T")[1];
+                                newIdleTime = `${todayStr}T${timePart}`;
+                            } else {
+                                newIdleTime = `${todayStr}T${t.idleTime}`;
+                            }
+                        }
 
-                    // update lastGeneratedDate on the template
-                    const templateIndex = nextQ.findIndex(q => q.id === t.id);
-                    if (templateIndex !== -1) {
-                        nextQ[templateIndex] = { ...nextQ[templateIndex], lastGeneratedDate: todayStr };
+                        const newTask: QueuedBlock = {
+                            ...t,
+                            id: Math.random().toString(36).substring(7),
+                            recurring: false,
+                            idleTime: newIdleTime,
+                            createdAt: Date.now()
+                        };
+                        nextQ.push(newTask);
+
+                        const templateIndex = nextQ.findIndex(q => q.id === t.id);
+                        if (templateIndex !== -1) {
+                            nextQ[templateIndex] = { ...nextQ[templateIndex], lastGeneratedDate: todayStr };
+                        }
+                        changed = true;
                     }
-                    changed = true;
                 }
-            }
 
-            if (changed) {
-                return { ...p, queue: nextQ };
-            }
-            return p;
-        });
-    }, [now]);
+                if (changed) {
+                    return { ...p, queue: nextQ };
+                }
+                return p;
+            });
+        };
+
+        generateRecurringTasks();
+        const id = setInterval(generateRecurringTasks, 60000);
+        return () => clearInterval(id);
+    }, []);
 
     const startBreak = (c: S) => {
         const b = (c.durations[c.block as Block] || [0, 0])[1];
@@ -275,14 +276,83 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
     };
 
-    let timeLeftMs = s.running && s.targetMs ? Math.max(0, s.targetMs - now) : (s.pausedLeftMs || 0);
-    let waitElapsedMs = s.mode === "wait" && s.waitStartMs ? Math.max(0, now - s.waitStartMs) : 0;
-    let waitLeftMs = s.mode === "wait" && s.waitTargetMs ? Math.max(0, s.waitTargetMs - now) : 0;
+    const startQueueItem = (p: S, qItem: QueuedBlock, qIndex: number): S => {
+        const nextQ = [...p.queue];
+        nextQ.splice(qIndex, 1);
+
+        if (p.mode === "b" && p.running) {
+            return {
+                ...p,
+                queue: nextQ,
+                pendingNext: {
+                    type: qItem.type as Block,
+                    task: qItem.task,
+                    notes: qItem.notes || "",
+                    idleTime: qItem.idleTime,
+                    tags: qItem.tags
+                }
+            };
+        }
+
+        if (qItem.idleTime) {
+            let target: number;
+            if (qItem.idleTime.includes("T")) {
+                target = new Date(qItem.idleTime).getTime();
+            } else {
+                const ct = new Date();
+                const [h, m] = qItem.idleTime.split(":").map(Number);
+                target = new Date(ct.getFullYear(), ct.getMonth(), ct.getDate(), h, m).getTime();
+                if (target <= ct.getTime()) target += 86400000;
+            }
+            return {
+                ...p,
+                mode: "idle",
+                block: qItem.type as Block,
+                task: qItem.task,
+                notes: qItem.notes || "",
+                currentTags: qItem.tags || [],
+                queue: nextQ,
+                running: true,
+                targetMs: target,
+                pausedLeftMs: null,
+                pendingNext: null
+            };
+        }
+
+        const dur = (p.durations[qItem.type as Block] || [25, 5])[0] * 60000;
+        return {
+            ...p,
+            mode: "w",
+            block: qItem.type as Block,
+            task: qItem.task,
+            notes: qItem.notes || "",
+            currentTags: qItem.tags || [],
+            queue: nextQ,
+            running: true,
+            targetMs: Date.now() + dur,
+            pausedLeftMs: null,
+            pendingNext: null
+        };
+    };
+
+    const nowMs = Date.now();
+    let timeLeftMs = s.running && s.targetMs ? Math.max(0, s.targetMs - nowMs) : (s.pausedLeftMs || 0);
+    let waitElapsedMs = s.mode === "wait" && s.waitStartMs ? Math.max(0, nowMs - s.waitStartMs) : 0;
+    let waitLeftMs = s.mode === "wait" && s.waitTargetMs ? Math.max(0, s.waitTargetMs - nowMs) : 0;
 
     useEffect(() => {
-        if (s.running && s.targetMs && now >= s.targetMs) completeBlock();
-        if (s.mode === "wait" && s.waitTargetMs && now >= s.waitTargetMs) abandonWait();
-    }, [now, s.running, s.targetMs, s.mode, s.waitTargetMs]);
+        if (!s.running || !s.targetMs || s.mode === "wait") return;
+        const timeoutMs = Math.max(0, s.targetMs - Date.now());
+        const id = setTimeout(() => completeBlock(), timeoutMs);
+        return () => clearTimeout(id);
+    }, [s.running, s.targetMs, s.mode]);
+
+    useEffect(() => {
+        if (s.mode !== "wait" || !s.waitTargetMs) return;
+        const timeoutMs = Math.max(0, s.waitTargetMs - Date.now());
+        const id = setTimeout(() => abandonWait(), timeoutMs);
+        return () => clearTimeout(id);
+    }, [s.mode, s.waitTargetMs]);
 
     useEffect(() => {
         const r = document.documentElement;
@@ -300,7 +370,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         toggle: () => set(p => {
             if (p.mode === "wait") return p; // toggle shouldn't affect wait
             if (p.running) {
-                return { ...p, running: false, targetMs: null, pausedLeftMs: timeLeftMs };
+                const runtimeLeftMs = p.targetMs ? Math.max(0, p.targetMs - Date.now()) : (p.pausedLeftMs || 0);
+                return { ...p, running: false, targetMs: null, pausedLeftMs: runtimeLeftMs };
             } else {
                 return { ...p, running: true, targetMs: Date.now() + (p.pausedLeftMs || 0), pausedLeftMs: null };
             }
@@ -343,15 +414,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 const [w] = p.durations[p.block as Block] || [10, 2];
                 return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "", notes: "", currentTags: [], pendingNext: null };
             }
-
-            const getFixedTarget = (idleTime: string) => {
-                if (idleTime.includes("T")) return new Date(idleTime);
-                const target = new Date();
-                const [h, m] = idleTime.split(":").map(Number);
-                target.setHours(h, m, 0, 0);
-                if (target.getTime() <= Date.now()) target.setTime(target.getTime() + 86400000);
-                return target;
-            };
 
             const fixedBlocks = selectable.filter(q => q.idleTime).map(q => {
                 const target = getFixedTarget(q.idleTime!);
@@ -412,44 +474,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }
 
             if (qItem) {
-                let nextQ = [...p.queue];
-                nextQ.splice(qIndex, 1);
-
-                // During break that's still running: queue the task to start after break ends
-                if (p.mode === "b" && p.running) {
-                    return {
-                        ...p,
-                        queue: nextQ,
-                        pendingNext: {
-                            type: qItem.type as Block,
-                            task: qItem.task,
-                            notes: qItem.notes || "",
-                            idleTime: qItem.idleTime,
-                            tags: qItem.tags
-                        }
-                    };
-                }
-
-                // Not in break — start immediately (e.g. from idle state)
-                if (qItem.idleTime) {
-                    let target: number;
-                    if (qItem.idleTime.includes("T")) {
-                        target = new Date(qItem.idleTime).getTime();
-                    } else {
-                        const ct = new Date();
-                        const [h, m] = qItem.idleTime.split(":").map(Number);
-                        target = new Date(ct.getFullYear(), ct.getMonth(), ct.getDate(), h, m).getTime();
-                        if (target <= ct.getTime()) target += 86400000;
-                    }
-                    return { ...p, mode: "idle", block: qItem.type as Block, task: qItem.task, notes: qItem.notes || "", currentTags: qItem.tags || [], queue: nextQ, running: true, targetMs: target, pausedLeftMs: null, pendingNext: null };
-                } else {
-                    const dur = (p.durations[qItem.type as Block] || [25, 5])[0] * 60000;
-                    return { ...p, mode: "w", block: qItem.type as Block, task: qItem.task, notes: qItem.notes || "", currentTags: qItem.tags || [], queue: nextQ, running: true, targetMs: Date.now() + dur, pausedLeftMs: null, pendingNext: null };
-                }
+                return startQueueItem(p, qItem, qIndex);
             } else {
                 const [w] = p.durations[p.block as Block] || [10, 2];
                 return { ...p, mode: "w", running: false, targetMs: null, pausedLeftMs: w * 60000, task: "", notes: "", currentTags: [], pendingNext: null };
             }
+        }),
+        chooseFromQueue: (id) => set(p => {
+            const selectable = p.queue.filter(q => !q.archived && !q.recurring);
+            const qItem = selectable.find(q => q.id === id);
+            if (!qItem) return p;
+            const qIndex = p.queue.findIndex(q => q.id === qItem.id);
+            if (qIndex === -1) return p;
+            return startQueueItem(p, qItem, qIndex);
+        }),
+        rouletteQueuePick: () => set(p => {
+            const now = Date.now();
+            const candidates = p.queue.filter(q => {
+                if (q.archived || q.recurring) return false;
+                if (!q.idleTime) return true;
+                return getFixedTarget(q.idleTime).getTime() <= now;
+            });
+
+            if (candidates.length === 0) return p;
+
+            const weighted = candidates.map(q => {
+                const isOld = !q.idleTime && !!q.createdAt && (now - q.createdAt) > 86400000;
+                return { q, weight: isOld ? 4 : 1 };
+            });
+
+            const total = weighted.reduce((sum, item) => sum + item.weight, 0);
+            let roll = Math.random() * total;
+            let chosen = weighted[weighted.length - 1].q;
+
+            for (const item of weighted) {
+                roll -= item.weight;
+                if (roll <= 0) {
+                    chosen = item.q;
+                    break;
+                }
+            }
+
+            const qIndex = p.queue.findIndex(q => q.id === chosen.id);
+            if (qIndex === -1) return p;
+            return startQueueItem(p, chosen, qIndex);
         }),
         cancelPending: () => set(p => {
             if (!p.pendingNext) return { ...p, pendingNext: null };
