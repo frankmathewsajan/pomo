@@ -36,13 +36,13 @@ export default function TimerNotes() {
   const shouldShowQuickPick = mode === "w" && !running && !task.trim() && queueChoices.length > 0;
 
   return (
-    <div className="flex flex-col items-center w-full max-w-[360px] gap-1">
-      <input className="task-input w-full text-center !py-3" disabled={isWait} placeholder="Task name…" value={task} onChange={(e) => setTask(e.target.value)} />
+    <div className="flex flex-col items-center w-full max-w-90 gap-1">
+      <input className="task-input w-full text-center py-3" disabled={isWait} placeholder="Task name…" value={task} onChange={(e) => setTask(e.target.value)} />
 
       {shouldShowQuickPick && (
         <div className="w-full mt-1 p-2 rounded-lg border border-black/5 bg-black/5 flex flex-col gap-2">
           <p className="text-[10px] uppercase tracking-widest font-bold opacity-55 text-center">Queue Actions</p>
-          <select className="task-input w-full text-xs font-semibold !py-2 bg-white" value={selectedQueueId} onChange={(e) => setSelectedQueueId(e.target.value)}>
+          <select className="task-input w-full text-xs font-semibold py-2 bg-white" value={selectedQueueId} onChange={(e) => setSelectedQueueId(e.target.value)}>
             {queueChoices.map((q) => {
               const scheduled = !!q.idleTime;
               const due = q.idleTime ? isDueNow(q.idleTime) : true;
@@ -50,8 +50,8 @@ export default function TimerNotes() {
             })}
           </select>
           <div className="flex gap-2">
-            <button className="btn secondary flex-1 !text-xs !py-2" disabled={!selectedQueueId} onClick={() => selectedQueueId && chooseFromQueue(selectedQueueId)}>Choose Task</button>
-            <button className="btn highlight flex-1 !text-xs !py-2 disabled:opacity-50" disabled={rouletteChoices.length === 0} onClick={rouletteQueuePick} title="Scheduled tasks are excluded until their due time.">Roulette Pick</button>
+            <button className="btn secondary flex-1 text-xs py-2" disabled={!selectedQueueId} onClick={() => selectedQueueId && chooseFromQueue(selectedQueueId)}>Choose Task</button>
+            <button className="btn highlight flex-1 text-xs py-2 disabled:opacity-50" disabled={rouletteChoices.length === 0} onClick={rouletteQueuePick} title="Scheduled tasks are excluded until their due time.">Roulette Pick</button>
           </div>
         </div>
       )}
@@ -73,7 +73,7 @@ export default function TimerNotes() {
               <textarea
                 ref={notesRef}
                 autoFocus
-                className={`task-input w-full p-2 text-xs font-normal resize-none min-h-[60px] bg-black/5 ${advancedNotes ? "rounded-b-md rounded-t-none border-t-0" : "rounded-md"}`}
+                className={`task-input w-full p-2 text-xs font-normal resize-none min-h-15 bg-black/5 ${advancedNotes ? "rounded-b-md rounded-t-none border-t-0" : "rounded-md"}`}
                 placeholder="Task notes (HTML supported)..."
                 value={tempNotes}
                 onChange={(e) => setTempNotes(e.target.value)}
@@ -85,7 +85,7 @@ export default function TimerNotes() {
               </div>
             </div>
           ) : (
-            <div className="text-xs opacity-60 font-normal leading-relaxed min-h-[20px] w-full hover:bg-black/5 rounded transition-colors p-1 notes-content overflow-hidden text-center flex flex-col items-center" onClick={() => { if (!isWait) setEditingNotes(true); }} style={{ cursor: isWait ? "default" : "text" }}>
+            <div className="text-xs opacity-60 font-normal leading-relaxed min-h-5 w-full hover:bg-black/5 rounded transition-colors p-1 notes-content overflow-hidden text-center flex flex-col items-center" onClick={() => { if (!isWait) setEditingNotes(true); }} style={{ cursor: isWait ? "default" : "text" }}>
               {notes ? <div dangerouslySetInnerHTML={{ __html: notes }} className="w-full" style={{ textAlign: "center" }} /> : <i>Click to add notes...</i>}
             </div>
           )}

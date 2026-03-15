@@ -8,11 +8,11 @@ export default function TimerControls() {
 
   if (mode === "w") {
     return (
-      <div className="flex gap-3 sm:gap-4 w-full max-w-[300px]">
-        <button className="btn transition-transform flex-1 !text-sm !py-2.5 sm:!py-3" onClick={toggle}>{running ? "Pause" : "Start"}</button>
-        {running && <button className="btn secondary transition-transform flex-1 !text-sm !py-2.5 sm:!py-3 opacity-90" onClick={openSetup}>Wait</button>}
-        {running && <button className="btn transition-transform flex-1 !text-sm !py-2.5 sm:!py-3" style={{ background: "var(--card)", color: "var(--text)" }} onClick={finish}>Finish</button>}
-        {!running && <button className="btn secondary transition-transform flex-1 !text-sm !py-2.5 sm:!py-3" onClick={reset}>Reset</button>}
+      <div className="flex gap-3 sm:gap-4 w-full max-w-75">
+        <button className="btn transition-transform flex-1 text-sm py-2.5 sm:py-3" onClick={toggle}>{running ? "Pause" : "Start"}</button>
+        {running && <button className="btn secondary transition-transform flex-1 text-sm py-2.5 sm:py-3 opacity-90" onClick={openSetup}>Wait</button>}
+        {running && <button className="btn transition-transform flex-1 text-sm py-2.5 sm:py-3" style={{ background: "var(--card)", color: "var(--text)" }} onClick={finish}>Finish</button>}
+        {!running && <button className="btn secondary transition-transform flex-1 text-sm py-2.5 sm:py-3" onClick={reset}>Reset</button>}
       </div>
     );
   }
@@ -24,8 +24,8 @@ export default function TimerControls() {
           Micro-task: <span style={{ color: "var(--accent)" }}>{waitTask}</span>
         </p>
         <div className="flex flex-col gap-3 w-full max-w-[320px]">
-          <button className="btn highlight transition-transform w-full !text-sm !py-2.5 sm:!py-3" onClick={resolveWait}>Reply Arrived (Resume Origin)</button>
-          <button className="btn secondary transition-transform w-full !text-sm !py-2.5 sm:!py-3 opacity-80 hover:bg-black/10" onClick={abandonWait}>Force Honourable Abandonment</button>
+          <button className="btn highlight transition-transform w-full text-sm py-2.5 sm:py-3" onClick={resolveWait}>Reply Arrived (Resume Origin)</button>
+          <button className="btn secondary transition-transform w-full text-sm py-2.5 sm:py-3 opacity-80 hover:bg-black/10" onClick={abandonWait}>Force Honourable Abandonment</button>
         </div>
       </div>
     );
@@ -41,14 +41,14 @@ export default function TimerControls() {
               <span className="opacity-60 text-xs ml-1">({pendingNext.type})</span>
             </p>
             <p className="text-xs opacity-50 text-center">Starts automatically when break ends</p>
-            <button className="btn secondary transition-transform !text-xs !py-1.5 !px-4 opacity-70 hover:opacity-100" onClick={cancelPending}>Cancel</button>
+            <button className="btn secondary transition-transform text-xs py-1.5 px-4 opacity-70 hover:opacity-100" onClick={cancelPending}>Cancel</button>
           </div>
         ) : (
           <p className="text-sm opacity-60 font-medium tracking-wide text-center">Take a break... or optionally skip to:</p>
         )}
         <div className="flex flex-col sm:flex-row gap-3 w-full max-w-[320px]">
-          <button className="btn secondary transition-transform flex-1 !text-sm !py-2.5 sm:!py-3" onClick={continueSame}>Continue Same</button>
-          <button className="btn highlight transition-transform flex-1 !text-sm !py-2.5 sm:!py-3 disabled:opacity-50 disabled:cursor-not-allowed" onClick={nextInQueue} disabled={queue.length === 0 || !!pendingNext}>
+          <button className="btn secondary transition-transform flex-1 text-sm py-2.5 sm:py-3" onClick={continueSame}>Continue Same</button>
+          <button className="btn highlight transition-transform flex-1 text-sm py-2.5 sm:py-3 disabled:opacity-50 disabled:cursor-not-allowed" onClick={nextInQueue} disabled={queue.length === 0 || !!pendingNext}>
             {pendingNext ? "Queued ✓" : "Next in Queue"}
           </button>
         </div>

@@ -3,8 +3,11 @@ import { T } from "../utils/themes";
 import { type Block, type QueuedBlock, type Entry, DEF_BLOCKS } from "../types";
 import { playStartSound } from "../utils/sounds";
 import { getFixedTarget } from "../utils/queueTime";
+import { LazyStore } from "@tauri-apps/plugin-store";
 
-const K = "pomo-state", HK = "pomo-history";
+const STORE = new LazyStore("pomo-state.json");
+const STORE_STATE_KEY = "state";
+const STORE_HISTORY_KEY = "history";
 
 type PendingNext = {
     type: Block;
@@ -44,13 +47,24 @@ const def: S = {
     durations: DEF_BLOCKS, targetMs: null, pausedLeftMs: DEF_BLOCKS.normal[0] * 60000, notes: "",
     pendingNext: null, trash: [], globalTags: [], currentTags: []
 };
-const load = (): S => {
-    try {
-        const stored = JSON.parse(localStorage.getItem(K)!);
-        return { ...def, ...stored, queue: stored.queue || [], durations: stored.durations || DEF_BLOCKS, trash: stored.trash || [], globalTags: stored.globalTags || [], currentTags: stored.currentTags || [] };
-    } catch { return def; }
-};
-const loadH = (): Entry[] => { try { return JSON.parse(localStorage.getItem(HK)!) || []; } catch { return []; } };
+
+function normalizeState(stored: unknown): S {
+    if (!stored || typeof stored !== "object") return def;
+    const candidate = stored as Partial<S>;
+    return {
+        ...def,
+        ...candidate,
+        queue: Array.isArray(candidate.queue) ? candidate.queue : [],
+        durations: candidate.durations || DEF_BLOCKS,
+        trash: Array.isArray(candidate.trash) ? candidate.trash : [],
+        globalTags: Array.isArray(candidate.globalTags) ? candidate.globalTags : [],
+        currentTags: Array.isArray(candidate.currentTags) ? candidate.currentTags : [],
+    };
+}
+
+function normalizeHistory(stored: unknown): Entry[] {
+    return Array.isArray(stored) ? (stored as Entry[]) : [];
+}
 
 type Ctx = S & {
     history: Entry[];
@@ -84,18 +98,58 @@ type Ctx = S & {
     addGlobalTag: (tag: string) => void;
     removeGlobalTag: (tag: string) => void;
     setCurrentTags: (tags: string[]) => void;
+    exportConfig: () => Promise<{ state: S; history: Entry[] }>;
+    importConfig: (data: { state?: unknown; history?: unknown }) => Promise<void>;
 };
 const C = createContext<Ctx>(null!);
 export const useApp = () => useContext(C);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-    const [s, set] = useState(load);
-    const [history, setHistory] = useState(loadH);
+    const [s, set] = useState<S>(def);
+    const [history, setHistory] = useState<Entry[]>([]);
+    const [isInitializing, setIsInitializing] = useState(true);
+    const isTauri = typeof window !== "undefined" && !!(window as any).__TAURI_INTERNALS__?.invoke;
     const ref = useRef(s);
     ref.current = s;
 
-    useEffect(() => { localStorage.setItem(K, JSON.stringify(s)); }, [s]);
-    useEffect(() => { localStorage.setItem(HK, JSON.stringify(history)); }, [history]);
+    useEffect(() => {
+        if (!isTauri) {
+            setIsInitializing(false);
+            return;
+        }
+
+        const initialize = async () => {
+            try {
+                const [storedState, storedHistory] = await Promise.all([
+                    STORE.get(STORE_STATE_KEY),
+                    STORE.get(STORE_HISTORY_KEY),
+                ]);
+                set(normalizeState(storedState));
+                setHistory(normalizeHistory(storedHistory));
+            } catch (error) {
+                console.error("Failed to initialize store:", error);
+                set(def);
+                setHistory([]);
+            } finally {
+                setIsInitializing(false);
+            }
+        };
+
+        void initialize();
+    }, [isTauri]);
+
+    useEffect(() => {
+        if (isInitializing || !isTauri) return;
+        void (async () => {
+            try {
+                await STORE.set(STORE_STATE_KEY, s);
+                await STORE.set(STORE_HISTORY_KEY, history);
+                await STORE.save();
+            } catch (error) {
+                console.error("Failed to persist store:", error);
+            }
+        })();
+    }, [s, history, isInitializing, isTauri]);
 
     // Daily recurring task round robin
     useEffect(() => {
@@ -553,8 +607,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setDuration: (b, w, br) => set(p => ({ ...p, durations: { ...p.durations, [b]: [w, br] } })),
         addGlobalTag: (t) => set(p => p.globalTags.includes(t) ? p : { ...p, globalTags: [...p.globalTags, t] }),
         removeGlobalTag: (t) => set(p => ({ ...p, globalTags: p.globalTags.filter(x => x !== t) })),
-        setCurrentTags: (tags) => set(p => ({ ...p, currentTags: tags }))
+        setCurrentTags: (tags) => set(p => ({ ...p, currentTags: tags })),
+        exportConfig: async () => ({ state: ref.current, history }),
+        importConfig: async (data) => {
+            const state = normalizeState(data.state);
+            const nextHistory = normalizeHistory(data.history);
+            set(state);
+            setHistory(nextHistory);
+            if (!isTauri) return;
+            await STORE.set(STORE_STATE_KEY, state);
+            await STORE.set(STORE_HISTORY_KEY, nextHistory);
+            await STORE.save();
+        }
     };
+
+    if (isInitializing) return null;
 
     return <C.Provider value={v}>{children}</C.Provider>;
 }

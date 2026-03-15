@@ -19,7 +19,7 @@ function GlobalTagsEditorInner() {
       <span className="text-[10px] font-bold uppercase tracking-widest opacity-50">Global Tags</span>
       <div className="flex flex-wrap gap-1">
         {globalTags.map((t) => (
-          <span key={t} className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded transition-all bg-black/10 text-[var(--text)] flex items-center gap-1 group">
+          <span key={t} className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded transition-all bg-black/10 text-(--text) flex items-center gap-1 group">
             {t}
             <button className="opacity-40 hover:opacity-100 hover:text-red-500" onClick={(e) => { e.stopPropagation(); removeGlobalTag(t); }}>✕</button>
           </span>

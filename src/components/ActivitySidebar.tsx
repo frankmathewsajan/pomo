@@ -55,19 +55,19 @@ export default function ActivitySidebar({ isOpen, onToggle }: ActivitySidebarPro
     <div className="w-80 border-r flex flex-col h-full bg-card overflow-hidden shrink-0" style={{ background: "var(--card)", borderColor: "var(--border-ring)", transition: "background-color 0.3s ease, border-color 0.3s ease" }}>
       <div className="shrink-0 flex flex-col gap-4 border-b" style={{ padding: "1.25rem", borderColor: "var(--border-ring)" }}>
         <div className="flex justify-between items-center">
-          <h2 className="label !m-0" style={{ opacity: 0.9 }}>Activity & History</h2>
-          <button className="wb w-6 h-6 rounded hover:bg-black/10" onClick={onToggle}>◀</button>
+          <h2 className="label m-0" style={{ opacity: 0.9 }}>Activity & History</h2>
+          <button className="wb size-6 rounded hover:bg-black/10" onClick={onToggle}>◀</button>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button className={`pill !px-3 !py-1 !text-xs ${filter === "all" ? "opacity-100 ring-2 ring-black/10" : "opacity-50"}`} onClick={() => setFilter("all")}>All</button>
-          <button className={`pill !px-3 !py-1 !text-xs ${filter === "completed" ? "opacity-100 ring-2 ring-black/10" : "opacity-50"}`} onClick={() => setFilter("completed")}>Done</button>
-          <button className={`pill !px-3 !py-1 !text-xs ${filter === "early" ? "opacity-100 ring-2 ring-black/10" : "opacity-50"}`} onClick={() => setFilter("early")}>Early</button>
-          <button className={`pill !px-3 !py-1 !text-xs ${filter === "abandoned" ? "opacity-100 ring-2 ring-black/10" : "opacity-50"}`} onClick={() => setFilter("abandoned")}>Wait drops</button>
+          <button className={`pill px-3 py-1 text-xs ${filter === "all" ? "opacity-100 ring-2 ring-black/10" : "opacity-50"}`} onClick={() => setFilter("all")}>All</button>
+          <button className={`pill px-3 py-1 text-xs ${filter === "completed" ? "opacity-100 ring-2 ring-black/10" : "opacity-50"}`} onClick={() => setFilter("completed")}>Done</button>
+          <button className={`pill px-3 py-1 text-xs ${filter === "early" ? "opacity-100 ring-2 ring-black/10" : "opacity-50"}`} onClick={() => setFilter("early")}>Early</button>
+          <button className={`pill px-3 py-1 text-xs ${filter === "abandoned" ? "opacity-100 ring-2 ring-black/10" : "opacity-50"}`} onClick={() => setFilter("abandoned")}>Wait drops</button>
         </div>
 
         <div className="relative w-full flex items-center group">
-          <input type="date" className="task-input w-full px-4 py-2 text-xs font-semibold h-10 border-none bg-black/5 focus:bg-white focus:ring-2 focus:ring-black/10 rounded-lg shadow-inner transition-all !max-w-none" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
-          {dateFilter && <button className="absolute right-2 wb w-6 h-6 opacity-60 hover:opacity-100 shrink-0 bg-white rounded shadow-sm border border-black/5" title="Clear Date" onClick={() => setDateFilter("")}>✕</button>}
+          <input type="date" className="task-input w-full px-4 py-2 text-xs font-semibold h-10 border-none bg-black/5 focus:bg-white focus:ring-2 focus:ring-black/10 rounded-lg shadow-inner transition-all max-w-none" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
+          {dateFilter && <button className="absolute right-2 wb size-6 opacity-60 hover:opacity-100 shrink-0 bg-white rounded shadow-sm border border-black/5" title="Clear Date" onClick={() => setDateFilter("")}>✕</button>}
         </div>
       </div>
 

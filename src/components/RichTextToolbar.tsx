@@ -47,7 +47,7 @@ export default function RichTextToolbar({
         }
     };
 
-    const tBtn = "wb w-6 h-6 flex items-center justify-center rounded bg-black/5 hover:bg-black/10 transition-colors font-bold text-[10px] shrink-0";
+    const tBtn = "wb size-6 flex items-center justify-center rounded bg-black/5 hover:bg-black/10 transition-colors font-bold text-[10px] shrink-0";
 
     return (
         <div className="flex flex-wrap gap-1 p-1.5 bg-black/5 border border-black/5 rounded-t-md w-full justify-start shadow-inner overflow-x-auto">
@@ -57,7 +57,7 @@ export default function RichTextToolbar({
             <button className={tBtn} title="Heading 1" onClick={() => insertTag("<h1>", "</h1>", "Heading 1")}>H1</button>
             <button className={tBtn} title="Heading 2" onClick={() => insertTag("<h2>", "</h2>", "Heading 2")}>H2</button>
             <button className={tBtn} title="Heading 3" onClick={() => insertTag("<h3>", "</h3>", "Heading 3")}>H3</button>
-            <div className="w-[1px] h-4 bg-black/20 mx-1 self-center shrink-0" />
+            <div className="w-px h-4 bg-black/20 mx-1 self-center shrink-0" />
             <button className={tBtn} title="Link" onClick={() => insertTag("<a href=\"#\">", "</a>", "link text")}>🔗</button>
             <button className={tBtn} title="Link Button" onClick={() => insertTag("<a href=\"#\" className=\"note-btn\">", "</a>", "Button")}>Btn</button>
             <button className={tBtn} title="Unordered List" onClick={() => insertTag("<ul>\n  <li>", "</li>\n  <li>Item 2</li>\n</ul>", "Item 1")}>UL</button>

@@ -110,28 +110,29 @@ describe('Themes', () => {
     });
 });
 
-// ── Context / localStorage ───────────────────────────────────────────────
+// ── Context / persistence ────────────────────────────────────────────────
 
 describe('Context & State Persistence', () => {
-    it('loads default state when localStorage is empty', () => {
+    it('loads default state when no native store is available', () => {
         render(<App />);
         expect(screen.getByText(/POMO/i)).toBeInTheDocument();
     });
 
-    it('survives corrupt localStorage gracefully', () => {
+    it('survives legacy localStorage noise gracefully', () => {
         localStorage.setItem('pomo-state', 'NOT_JSON{{{');
         localStorage.setItem('pomo-history', '[broken');
         expect(() => render(<App />)).not.toThrow();
     });
 
-    it('restores valid state from localStorage', () => {
+    it('ignores legacy localStorage persistence in plugin-store mode', () => {
         const state = {
             theme: 0, running: false, mode: 'w', block: 'deep', task: 'Persisted Task',
             queue: [], durations: DEF_BLOCKS, targetMs: null, pausedLeftMs: 3000000, notes: ''
         };
         localStorage.setItem('pomo-state', JSON.stringify(state));
         render(<App />);
-        expect(screen.getByDisplayValue('Persisted Task')).toBeInTheDocument();
+        expect(screen.queryByDisplayValue('Persisted Task')).not.toBeInTheDocument();
+        expect(screen.getByDisplayValue('')).toBeInTheDocument();
     });
 });
 
