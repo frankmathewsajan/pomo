@@ -9,8 +9,7 @@
     "tauri": "tauri",
     "test": "vitest run",
     "release": "bun run tauri build",
-    "release:win:github": "./release.ps1",
-    "release:linux:github": "bash ./release-wsl.sh"
+    "release:github": "bun run scripts/release.js"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",
