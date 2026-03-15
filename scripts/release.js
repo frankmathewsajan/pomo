@@ -104,7 +104,11 @@ async function main() {
             if (statSync(fullPath).isDirectory()) {
                 findArtifacts(fullPath);
             } else if (allowedExts.includes(extname(fullPath))) {
-                artifacts.push(fullPath);
+                if (file.includes(targetVersion)) {
+                    artifacts.push(fullPath);
+                } else {
+                    console.log(`Ignoring stale artifact: ${file}`);
+                }
             }
         }
     };
