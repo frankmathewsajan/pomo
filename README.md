@@ -1,4 +1,4 @@
-# POMO - Page 1: Cognitive Science Model and Time-Block Theory
+# Cognitive Science Model and Time-Block Theory
 
 POMO is a desktop-first, queue-driven focus system built with Tauri v2, React 19, Vite, and Tailwind v4.
 This page explains why the default block model is intentionally asymmetric and why break enforcement is treated as part of the algorithm, not optional decoration.
@@ -46,7 +46,7 @@ References:
 - Draugiem Group / DeskTime (2014). Rule of 52 and 17 analysis.
 - Raichle, M. E., et al. (2001). Default mode of brain function.
 
-# POMO - Page 2: Implementation Architecture and State Machine
+# Implementation Architecture and State Machine
 
 This page maps the theory to concrete implementation details in the app code.
 
@@ -107,7 +107,7 @@ Testing and quality posture:
 - Unit/integration tests cover queue lifecycle, activity behavior, timer controls, and scheduler-sensitive interactions.
 - Bun compatibility is handled with preloaded jsdom bootstrap and matcher extension setup.
 
-# POMO - Page 3: Workflow Mechanics, Recurrence Engine, and Release Operations
+# Workflow Mechanics, Recurrence Engine, and Release Operations
 
 This page describes end-user operations and contributor/release mechanics.
 
