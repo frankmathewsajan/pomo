@@ -9,28 +9,35 @@ Write-Host "Current version is $currentVersion"
 $updateVersion = Read-Host "Do you want to update the version before releasing? (y/N)"
 
 if ($updateVersion -match "^[yY]") {
-    $newVersion = Read-Host "Enter new version (e.g. 0.9.1)"
-    if (-not [string]::IsNullOrWhiteSpace($newVersion)) {
-        Write-Host "Updating version to $newVersion in files..."
-        
+    $bumpChoice = Read-Host "Enter 'patch', 'minor', 'major', or a specific version (e.g. 0.9.1) [default: patch]"
+    if ([string]::IsNullOrWhiteSpace($bumpChoice)) {
+        $bumpChoice = "patch"
+    }
+
+    if ($bumpChoice -match "^(patch|minor|major)$") {
+        Write-Host "Bumping $bumpChoice version using npm..."
+        npm version $bumpChoice --no-git-tag-version
+        $newVersion = (Get-Content $packageJsonPath | ConvertFrom-Json).version
+    }
+    else {
+        $newVersion = $bumpChoice
         $pkgLines = Get-Content $packageJsonPath
         $pkgLines -replace '^(\s*"version":\s*").*?(")', "`${1}$newVersion`$2" | Set-Content $packageJsonPath
         
         $pkgLockLines = Get-Content $packageLockJsonPath
         $pkgLockLines -replace '^(\s*"version":\s*").*?(")', "`${1}$newVersion`$2" | Set-Content $packageLockJsonPath
-        
-        $tauriLines = Get-Content $tauriConfPath
-        $tauriLines -replace '^(\s*"version":\s*").*?(")', "`${1}$newVersion`$2" | Set-Content $tauriConfPath
-        
-        $cargoContent = Get-Content $cargoTomlPath -Raw
-        $cargoContent = $cargoContent -replace '(?m)(^\[package\]\s*[\r\n]+(?:[^\[]*[\r\n]+)*?^version\s*=\s*").*?(")', "`${1}$newVersion`$2"
-        Set-Content -Path $cargoTomlPath -Value $cargoContent -NoNewline
+    }
+    
+    Write-Host "Syncing version $newVersion to Tauri files..."
+    
+    $tauriLines = Get-Content $tauriConfPath
+    $tauriLines -replace '^(\s*"version":\s*").*?(")', "`${1}$newVersion`$2" | Set-Content $tauriConfPath
+    
+    $cargoContent = Get-Content $cargoTomlPath -Raw
+    $cargoContent = $cargoContent -replace '(?m)(^\[package\]\s*[\r\n]+(?:[^\[]*[\r\n]+)*?^version\s*=\s*").*?(")', "`${1}$newVersion`$2"
+    Set-Content -Path $cargoTomlPath -Value $cargoContent -NoNewline
 
-        $version = $newVersion
-    }
-    else {
-        $version = $currentVersion
-    }
+    $version = $newVersion
 }
 else {
     $version = $currentVersion

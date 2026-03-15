@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 import { AppProvider, useApp } from "./ctx";
 import Timer from "./Timer";
-import Analytics from "./Analytics";
 import { T } from "./themes";
 import { BLOCK_NAMES, type Block, type RecurringOption } from "./types";
 import RichTextToolbar from "./RichTextToolbar";
@@ -100,8 +99,8 @@ function Toggle({ on, onToggle, label }: { on: boolean; onToggle: () => void; la
     );
 }
 
-function TagPicker({ tags, selected, onChange, onAdd }: { tags: string[], selected: string[], onChange: (s: string[]) => void, onAdd: (t: string) => void }) {
-    const [newTag, setNewTag] = useState("");
+function TagPicker({ tags, selected, onChange }: { tags: string[], selected: string[], onChange: (s: string[]) => void }) {
+    if (tags.length === 0) return null;
 
     return (
         <div className="flex flex-col gap-2 mt-2 bg-white/5 p-2 rounded-lg border border-black/5">
@@ -119,22 +118,6 @@ function TagPicker({ tags, selected, onChange, onAdd }: { tags: string[], select
                         {t}
                     </button>
                 ))}
-            </div>
-            <div className="flex gap-1 mt-1">
-                <input
-                    className="task-input flex-1 !py-1 !px-2 text-[10px] uppercase font-bold bg-white focus:ring-1 focus:ring-black/10 rounded"
-                    placeholder="New Tag (Enter)..."
-                    value={newTag}
-                    onChange={e => setNewTag(e.target.value)}
-                    onKeyDown={e => {
-                        if (e.key === "Enter" && newTag.trim()) {
-                            e.preventDefault();
-                            onAdd(newTag.trim().toLowerCase());
-                            if (!selected.includes(newTag.trim().toLowerCase())) onChange([...selected, newTag.trim().toLowerCase()]);
-                            setNewTag("");
-                        }
-                    }}
-                />
             </div>
         </div>
     );
@@ -490,7 +473,7 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
 
                                                         {/* EDIT TAGS */}
                                                         <div className="-ml-1">
-                                                            <TagPicker tags={globalTags} selected={editTags} onChange={setEditTags} onAdd={addGlobalTag} />
+                                                            <TagPicker tags={globalTags} selected={editTags} onChange={setEditTags} />
                                                         </div>
 
                                                         {/* EDIT SCHEDULE & RECURRING */}
@@ -636,7 +619,7 @@ function QueueSidebar({ isOpen, onToggle }: { isOpen: boolean, onToggle: () => v
                     <Toggle on={isIdle} onToggle={() => setIsIdle(!isIdle)} label="Schedule" />
                 </div>
 
-                <TagPicker tags={globalTags} selected={qTags} onChange={setQTags} onAdd={addGlobalTag} />
+                <TagPicker tags={globalTags} selected={qTags} onChange={setQTags} />
 
                 {isRecurring && (
                     <div className="flex flex-col gap-2 mt-2 bg-white/5 p-2 rounded-lg border border-black/5">
@@ -683,7 +666,6 @@ function Chrome() {
     const { theme, next } = useApp();
     const [leftOpen, setLeftOpen] = useState(false);
     const [rightOpen, setRightOpen] = useState(false);
-    const [showAnalytics, setShowAnalytics] = useState(false);
 
     const toggleLeft = () => {
         if (!leftOpen && rightOpen && window.innerWidth < 1100) {
@@ -762,19 +744,11 @@ function Chrome() {
                 <ActivitySidebar isOpen={leftOpen} onToggle={toggleLeft} />
                 <main className="flex-1 min-w-[500px] flex flex-col items-center justify-center p-6 sm:p-12 overflow-y-auto relative">
 
-                    {showAnalytics ? <Analytics onBack={() => setShowAnalytics(false)} /> : <Timer />}
+                    <Timer />
 
                     {/* Bottom Left Controls */}
                     <div className="absolute bottom-6 left-6 sm:bottom-8 sm:left-8 z-50 flex flex-col items-center gap-4">
-                        <button
-                            className="w-10 h-10 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-all shadow-sm cursor-pointer hover:scale-105"
-                            onClick={() => setShowAnalytics(!showAnalytics)}
-                            title="Analytics Dashboard"
-                        >
-                            <svg className={`w-5 h-5 transition-colors ${showAnalytics ? 'text-[var(--accent)]' : 'opacity-85'}`} fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" />
-                            </svg>
-                        </button>
+        
 
                         <button
                             className="w-10 h-10 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-all shadow-sm cursor-pointer hover:scale-105"
@@ -797,9 +771,10 @@ function Chrome() {
 
 // Add toggleAdvancedNotes to App context sync menu 
 function SyncMenu() {
-    const { waitEnabled, toggleWaitEnabled, advancedNotes, toggleAdvancedNotes } = useApp();
+    const { waitEnabled, toggleWaitEnabled, advancedNotes, toggleAdvancedNotes, globalTags, addGlobalTag, removeGlobalTag } = useApp();
     const [open, setOpen] = useState(false);
     const [exportNotice, setExportNotice] = useState<string | null>(null);
+    const [newTag, setNewTag] = useState("");
     const fileInputRef = useRef<HTMLInputElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -812,6 +787,16 @@ function SyncMenu() {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    const handleAddTags = () => {
+        if (newTag.trim()) {
+            newTag.split(',').forEach(tag => {
+                const t = tag.trim().toLowerCase();
+                if (t) addGlobalTag(t);
+            });
+            setNewTag("");
+        }
+    };
 
     const handleExport = () => {
         const state = localStorage.getItem("pomo-state");
@@ -881,6 +866,31 @@ function SyncMenu() {
                         <div className="px-4 py-2 flex justify-between items-center cursor-pointer hover:bg-black/5 transition-colors" onClick={toggleAdvancedNotes}>
                             <span>Advanced Notes</span>
                             <span className="font-bold opacity-70">{advancedNotes ? "ON" : "OFF"}</span>
+                        </div>
+                        <div className="px-4 py-3 border-t mt-1 border-black/5 flex flex-col gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-widest opacity-50">Global Tags</span>
+                            <div className="flex flex-wrap gap-1">
+                                {globalTags.map(t => (
+                                    <span key={t} className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded transition-all bg-black/10 text-[var(--text)] flex items-center gap-1 group">
+                                        {t}
+                                        <button className="opacity-40 hover:opacity-100 hover:text-red-500" onClick={(e) => { e.stopPropagation(); removeGlobalTag(t); }}>✕</button>
+                                    </span>
+                                ))}
+                            </div>
+                            <input
+                                className="w-full px-2 py-1 text-xs bg-black/5 rounded focus:bg-white focus:ring-1 focus:ring-black/10 transition-colors border border-black/5 mt-1"
+                                placeholder="Type to add tags (comma sep)..."
+                                value={newTag}
+                                onChange={e => setNewTag(e.target.value)}
+                                onBlur={handleAddTags}
+                                onKeyDown={e => {
+                                    if (e.key === "Enter" && newTag.trim()) {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleAddTags();
+                                    }
+                                }}
+                            />
                         </div>
                     </div>
                 </div>
