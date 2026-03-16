@@ -8,6 +8,7 @@ import { LazyStore } from "@tauri-apps/plugin-store";
 const STORE = new LazyStore("pomo-state.json");
 const STORE_STATE_KEY = "state";
 const STORE_HISTORY_KEY = "history";
+const LEGACY_DEF_BLOCKS = { mini: [10, 2], normal: [25, 5], deep: [50, 10] } as const;
 
 type PendingNext = {
     type: Block;
@@ -51,18 +52,62 @@ const def: S = {
     pendingNext: null, trash: [], globalTags: [], currentTags: [], activeQueueItem: null, miniPrompt: false
 };
 
+function isDurationTuple(value: unknown): value is readonly [number, number] {
+    return Array.isArray(value) && value.length === 2 && value.every((item) => typeof item === "number" && Number.isFinite(item));
+}
+
+function matchesBlockDurations(
+    durations: Partial<Record<Block, readonly [number, number]>>,
+    expected: Record<Block, readonly [number, number]>
+) {
+    return (Object.keys(expected) as Block[]).every((block) => {
+        const current = durations[block];
+        const target = expected[block];
+        return !!current && current[0] === target[0] && current[1] === target[1];
+    });
+}
+
+function normalizeDurations(value: unknown): Record<Block, readonly [number, number]> {
+    if (!value || typeof value !== "object") return DEF_BLOCKS;
+
+    const candidate = value as Partial<Record<Block, unknown>>;
+    const merged = (Object.keys(DEF_BLOCKS) as Block[]).reduce<Record<Block, readonly [number, number]>>((acc, block) => {
+        const blockValue = candidate[block];
+        acc[block] = isDurationTuple(blockValue) ? blockValue : DEF_BLOCKS[block];
+        return acc;
+    }, { ...DEF_BLOCKS });
+
+    return matchesBlockDurations(merged, LEGACY_DEF_BLOCKS) ? DEF_BLOCKS : merged;
+}
+
 function normalizeState(stored: unknown): S {
     if (!stored || typeof stored !== "object") return def;
     const candidate = stored as Partial<S>;
-    return {
+    const durations = normalizeDurations(candidate.durations);
+    const normalized = {
         ...def,
         ...candidate,
         queue: Array.isArray(candidate.queue) ? candidate.queue : [],
-        durations: candidate.durations || DEF_BLOCKS,
+        durations,
         trash: Array.isArray(candidate.trash) ? candidate.trash : [],
         globalTags: Array.isArray(candidate.globalTags) ? candidate.globalTags : [],
         currentTags: Array.isArray(candidate.currentTags) ? candidate.currentTags : [],
-    };
+    } satisfies S;
+
+    if (
+        candidate.mode === "w" &&
+        !candidate.running &&
+        !candidate.targetMs &&
+        !candidate.task &&
+        typeof candidate.block === "string" &&
+        matchesBlockDurations(durations, DEF_BLOCKS) &&
+        typeof candidate.pausedLeftMs === "number" &&
+        candidate.pausedLeftMs === LEGACY_DEF_BLOCKS[candidate.block as Block][0] * 60000
+    ) {
+        normalized.pausedLeftMs = durations[candidate.block as Block][0] * 60000;
+    }
+
+    return normalized;
 }
 
 function normalizeHistory(stored: unknown): Entry[] {

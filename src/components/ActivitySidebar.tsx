@@ -88,16 +88,14 @@ export default function ActivitySidebar({ isOpen, onToggle }: ActivitySidebarPro
                 <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 ${h.status === "early" ? "bg-red-500/10 text-red-600" : h.status === "abandoned" ? "bg-zinc-500/10 text-zinc-500" : h.status === "micro-task" ? "bg-blue-500/10 text-blue-500" : "bg-green-500/10 text-green-600"}`}>
                   {h.status}
                 </span>
-                {h.status === "completed" && (
-                  <button
-                    className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 bg-black/5 hover:bg-black/10 transition-colors"
-                    title="Hide activity"
-                    aria-label={`Hide activity ${h.task || "Untitled"}`}
-                    onClick={() => setHiddenEntries((current) => [...current, getEntryKey(h)])}
-                  >
-                    Hide
-                  </button>
-                )}
+                <button
+                  className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 bg-black/5 hover:bg-black/10 transition-colors"
+                  title="Hide activity"
+                  aria-label={`Hide activity ${h.task || "Untitled"}`}
+                  onClick={() => setHiddenEntries((current) => [...current, getEntryKey(h)])}
+                >
+                  Hide
+                </button>
               </div>
             </div>
             <span className="opacity-60 text-[10px] font-bold uppercase tracking-wider">{h.block} • {new Date(h.at).toLocaleDateString()} {new Date(h.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>

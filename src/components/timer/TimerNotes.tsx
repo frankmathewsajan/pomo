@@ -37,60 +37,65 @@ export default function TimerNotes() {
 
   return (
     <div className="flex flex-col items-center w-full max-w-90 gap-1">
-      <input className="task-input w-full text-center py-3" disabled={isWait} placeholder="Task name…" value={task} onChange={(e) => setTask(e.target.value)} />
+      {!shouldShowQuickPick && <input className="task-input w-full text-center py-3" disabled={isWait} placeholder="Task name…" value={task} onChange={(e) => setTask(e.target.value)} />}
 
       {shouldShowQuickPick && (
-        <div data-testid="queue-quick-pick" className="w-full mt-3 px-3 py-3 rounded-lg border border-black/5 bg-black/5 flex flex-col gap-3">
-          <p className="text-[10px] uppercase tracking-widest font-bold opacity-55 text-center">Queue Actions</p>
-          <select aria-label="Queue task picker" className="task-input w-full text-sm sm:text-base font-semibold py-3 px-4 bg-white" value={selectedQueueId} onChange={(e) => setSelectedQueueId(e.target.value)}>
-            {queueChoices.map((q) => {
-              const scheduled = !!q.idleTime;
-              const due = q.idleTime ? isDueNow(q.idleTime) : true;
-              return <option key={q.id} value={q.id}>{q.task} ({q.type}){scheduled ? due ? " • scheduled (due)" : " • scheduled" : ""}</option>;
-            })}
-          </select>
-          <div className="flex gap-2">
-            <button className="btn secondary flex-1 text-xs py-2" disabled={!selectedQueueId} onClick={() => selectedQueueId && chooseFromQueue(selectedQueueId)}>Choose Task</button>
-            <button className="btn highlight flex-1 text-xs py-2 disabled:opacity-50" disabled={rouletteChoices.length === 0} onClick={rouletteQueuePick} title="Scheduled tasks are excluded until their due time.">Roulette Pick</button>
-          </div>
-          {miniPrompt && <p className="text-[11px] sm:text-xs font-semibold text-center opacity-70">Mini sprint finished. Pull another mini from the queue or switch to Normal or Deep.</p>}
+      <div data-testid="queue-quick-pick" className="w-full mt-3 px-3 py-3 rounded-lg border border-black/5 bg-black/5 flex flex-col items-center gap-3">
+        <p className="text-[10px] uppercase tracking-widest font-bold opacity-55 text-center">Queue Actions</p>
+        <select
+        aria-label="Queue task picker"
+        className="task-input text-sm sm:text-base font-semibold py-3 px-4 bg-white mx-auto text-center w-full sm:w-auto sm:min-w-[30rem] max-w-full sm:max-w-xl"
+        value={selectedQueueId}
+        onChange={(e) => setSelectedQueueId(e.target.value)}
+        >
+        {queueChoices.map((q) => {
+          const scheduled = !!q.idleTime;
+          const due = q.idleTime ? isDueNow(q.idleTime) : true;
+          return <option key={q.id} value={q.id}>{q.task} ({q.type}){scheduled ? due ? " • scheduled (due)" : " • scheduled" : ""}</option>;
+        })}
+        </select>
+        <div className="flex gap-2 w-full max-w-md">
+        <button className="btn secondary flex-1 text-xs py-2" disabled={!selectedQueueId} onClick={() => selectedQueueId && chooseFromQueue(selectedQueueId)}>Choose Task</button>
+        <button className="btn highlight flex-1 text-xs py-2 disabled:opacity-50" disabled={rouletteChoices.length === 0} onClick={rouletteQueuePick} title="Scheduled tasks are excluded until their due time.">Roulette Pick</button>
         </div>
+        {miniPrompt && <p className="text-[11px] sm:text-xs font-semibold text-center opacity-70">Mini sprint finished. Pull another mini from the queue or switch to Normal or Deep.</p>}
+      </div>
       )}
 
-      {(mode === "w" || isWait) && (
-        <div className="w-full text-center mt-1 text-sm">
-          {editingNotes ? (
-            <div
-              ref={notesContainerRef}
-              className="flex flex-col w-full relative group"
-              onBlur={(e) => {
-                if (!notesContainerRef.current?.contains(e.relatedTarget as Node)) {
-                  setNotes(tempNotes);
-                  setEditingNotes(false);
-                }
-              }}
-            >
-              {advancedNotes && <RichTextToolbar textareaRef={notesRef} value={tempNotes} onChange={setTempNotes} />}
-              <textarea
-                ref={notesRef}
-                autoFocus
-                className={`task-input w-full p-2 text-xs font-normal resize-none min-h-15 bg-black/5 ${advancedNotes ? "rounded-b-md rounded-t-none border-t-0" : "rounded-md"}`}
-                placeholder="Task notes (HTML supported)..."
-                value={tempNotes}
-                onChange={(e) => setTempNotes(e.target.value)}
-              />
-              <div className="flex justify-end items-center mt-1 px-1">
-                <button type="button" className="text-[10px] font-bold opacity-60 hover:opacity-100 bg-black/5 px-2 py-1 rounded" onClick={() => { setNotes(tempNotes); setEditingNotes(false); }}>
-                  Done
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="text-xs opacity-60 font-normal leading-relaxed min-h-5 w-full hover:bg-black/5 rounded transition-colors p-1 notes-content overflow-hidden text-center flex flex-col items-center" onClick={() => { if (!isWait) setEditingNotes(true); }} style={{ cursor: isWait ? "default" : "text" }}>
-              {notes ? <div dangerouslySetInnerHTML={{ __html: notes }} className="w-full" style={{ textAlign: "center" }} /> : <i>Click to add notes...</i>}
-            </div>
-          )}
+      {(mode === "w" || isWait) && !shouldShowQuickPick && (
+      <div className="w-full text-center mt-1 text-sm">
+        {editingNotes ? (
+        <div
+          ref={notesContainerRef}
+          className="flex flex-col w-full relative group"
+          onBlur={(e) => {
+          if (!notesContainerRef.current?.contains(e.relatedTarget as Node)) {
+            setNotes(tempNotes);
+            setEditingNotes(false);
+          }
+          }}
+        >
+          {advancedNotes && <RichTextToolbar textareaRef={notesRef} value={tempNotes} onChange={setTempNotes} />}
+          <textarea
+          ref={notesRef}
+          autoFocus
+          className={`task-input w-full p-2 text-xs font-normal resize-none min-h-15 bg-black/5 ${advancedNotes ? "rounded-b-md rounded-t-none border-t-0" : "rounded-md"}`}
+          placeholder="Task notes (HTML supported)..."
+          value={tempNotes}
+          onChange={(e) => setTempNotes(e.target.value)}
+          />
+          <div className="flex justify-end items-center mt-1 px-1">
+          <button type="button" className="text-[10px] font-bold opacity-60 hover:opacity-100 bg-black/5 px-2 py-1 rounded" onClick={() => { setNotes(tempNotes); setEditingNotes(false); }}>
+            Done
+          </button>
+          </div>
         </div>
+        ) : (
+        <div className="text-xs opacity-60 font-normal leading-relaxed min-h-5 w-full hover:bg-black/5 rounded transition-colors p-1 notes-content overflow-hidden text-center flex flex-col items-center" onClick={() => { if (!isWait) setEditingNotes(true); }} style={{ cursor: isWait ? "default" : "text" }}>
+          {notes ? <div dangerouslySetInnerHTML={{ __html: notes }} className="w-full" style={{ textAlign: "center" }} /> : <i>Click to add notes...</i>}
+        </div>
+        )}
+      </div>
       )}
     </div>
   );

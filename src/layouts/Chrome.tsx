@@ -102,9 +102,9 @@ export default function Chrome() {
         </div>
 
         <div className="flex gap-2 z-50">
-          <button className="wb size-7 flex items-center justify-center hover:bg-black/10 transition-colors rounded" onClick={() => getCurrentWindow().minimize()}>─</button>
-          <button className="wb size-7 flex items-center justify-center hover:bg-black/10 transition-colors rounded" onClick={() => getCurrentWindow().toggleMaximize()}>□</button>
-          <button className="wb close size-7 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors rounded" onClick={() => getCurrentWindow().close()}>✕</button>
+          <button aria-label="Minimize window" className="wb size-7 flex items-center justify-center hover:bg-black/10 transition-colors rounded" onClick={() => getCurrentWindow().minimize()}>─</button>
+          <button aria-label="Maximize window" className="wb size-7 flex items-center justify-center hover:bg-black/10 transition-colors rounded" onClick={() => getCurrentWindow().toggleMaximize()}>□</button>
+          <button aria-label="Close window" className="wb close size-7 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors rounded" onClick={() => getCurrentWindow().close()}>✕</button>
         </div>
       </div>
       <div className="flex flex-1 overflow-hidden backdrop-blur-3xl" style={{ backdropFilter: "var(--backdrop)", WebkitBackdropFilter: "var(--backdrop)" }}>

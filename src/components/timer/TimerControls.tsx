@@ -49,7 +49,7 @@ export default function TimerControls() {
           </div>
         ) : (
           <div className="flex flex-col gap-2 items-center">
-            <p className="text-sm opacity-60 font-medium tracking-wide text-center">Take a break... or optionally skip to:</p>
+            <p className="text-sm opacity-60 font-medium tracking-wide text-center">Take a break... plan the next step and queue it if needed:</p>
             {block === "normal" && <p className="text-xs max-w-[320px] text-center opacity-70">Pattern interrupt: use the 20-20-20 rule. Look 20 feet away for 20 seconds, then spend the rest of the 5 minutes moving and resetting your posture.</p>}
             {block === "deep" && <p className="text-xs max-w-[320px] text-center opacity-70">Deep reset: step away for the full 17 minutes so your default mode network can recover before the next analytical block.</p>}
           </div>

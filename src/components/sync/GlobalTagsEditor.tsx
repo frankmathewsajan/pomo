@@ -27,7 +27,7 @@ function GlobalTagsEditorInner() {
       </div>
       <input
         className="w-full px-2 py-1 text-xs bg-black/5 rounded focus:bg-white focus:ring-1 focus:ring-black/10 transition-colors border border-black/5 mt-1"
-        placeholder="Type to add tags (comma sep)..."
+        placeholder="Type to add tags `,` separated"
         value={newTag}
         onChange={(e) => setNewTag(e.target.value)}
         onBlur={handleAddTags}

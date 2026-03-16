@@ -149,8 +149,6 @@ Developer quick commands:
 bun install
 bun run tauri dev
 bun run tsc --noEmit
-bun run test
-bun test
 bun run tauri build
 ```
 
